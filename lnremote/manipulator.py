@@ -153,10 +153,13 @@ class LuigsAndNeumannSM10:
 
     def slowApproachAbsolutePosition(self, position):
         cmd_id = '0049'
-        nbytes = '5'
-        unit = '1'
-        data = f'{unit}{position}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x05
+        unit = 0x01
+        position = binascii.hexlify(struct.pack('>f', position))
+        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        response = b''
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def fastApproachRelativePosition(self, position):
         cmd_id = '004A'
@@ -512,14 +515,17 @@ class LuigsAndNeumannSM10:
         self.sendCommand(cmd_id, nbytes, data)
 
     def approachXYZPosition(self, slot_number, velocity):
+        """Approach previously stored position on slot N
+        """
         assert (slot_number > 0 and slot_number <= 5)
         assert (velocity > 0 and velocity <= 15)
         cmd_id = 'A110'
-        nbytes = 'C'
-        group_flag = 'A0'
+        nbytes = 0x0C
+        group_flag = 0xA0
         slot_number = str(slot_number)
         velocity = str(velocity)
-        data = f'{group_flag}{self.GROUPADDRESSXYZ}{slot_number}{velocity}'
+        # data = f'{group_flag}{self.GROUPADDRESSXYZ}{slot_number}{velocity}'
+        data = ([group_flag, self.GROUPADDRESSXYZ, slot_number, velocity])
         self.sendCommand(cmd_id, nbytes, data)
 
     def stepXYZPositive(self, velocity, distance):
