@@ -41,6 +41,7 @@ class LuigsAndNeumannSM10:
     GROUPADDRESSYZ = [0,0,0,0,0,0,0,0,6]
     GROUPADDRESSXZ = [0,0,0,0,0,0,0,0,5]
     GROUPADDRESSXY = [0,0,0,0,0,0,0,0,3]
+    GROUPADDRESSX = [0,0,0,0,0,0,0,0,1]
 
     full_command = ''
 
@@ -53,7 +54,7 @@ class LuigsAndNeumannSM10:
         self._verbose = True
 
         # establish serial connection
-        serial_number = 'AQ01JPC8A'
+        serial_number = 'AQ01JPBXA'
         self.device = self.find_manipulator(serial_number)
         self.manipulator = self.establish_serial_connection(self.device, self._reset_timer)
 
@@ -125,31 +126,73 @@ class LuigsAndNeumannSM10:
         data = f'{unit}{speed}'
         self.sendCommand(cmd_id, nbytes, data)
 
-    def moveXIn(self):
-        # <16><0014><0101><AsAAA>
-        cmd_id = '0015'
-        nbytes = 1
-        axis = 1
+    def fastMoveXIn(self):
+        cmd_id = '0012'
+        nbytes = 0x01
+        axis = 0x01
         data = ([axis])
-        response = b'\x06\x00\x15\x00\xbb\xbb'
-        resp_n_bytes = len(response)
-        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
+        response = 'b\x06\x00\x12\x00\xbb\xbb'
+        response_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, response_n_bytes)
 
-    def moveXOut(self):
+    def fastMoveXOut(self):
+        cmd_id = '0013'
+        nbytes = 0x01
+        axis = 0x01
+        data = ([axis])
+        response = 'b\x06\x00\x13\x00\xbb\xbb'
+        response_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, response_n_bytes)
+
+    def slowMoveXOut(self):
         cmd_id = '0014'
-        nbytes = 1
-        axis = 1
+        nbytes = 0x01
+        axis = 0x01
         data = ([axis])
         response = b'\x06\x00\x14\x00\xbb\xbb'
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
+    def slowMoveXIn(self):
+        cmd_id = '0015'
+        nbytes = 0x01
+        axis = 0x01
+        data = ([axis])
+        response = b'\x06\x00\x15\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
+
+    def setXFastSpeed(self, velocity):
+        assert isinstance(velocity, int)
+        assert (velocity >= 0 and velocity <= 15)
+        cmd_id = '0134'
+        nbytes = 0x02
+        axis = 0x01
+        data = ([axis, velocity])
+        response = b'\x06\x01\x34\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
+
+    def setXSlowSpeed(self, velocity):
+        assert isinstance(velocity, int)
+        assert (velocity >= 0 and velocity <= 15)
+        cmd_id = '0135'
+        nbytes = 0x02
+        axis = 0x01
+        data = ([axis, velocity])
+        response = b'\x06\x01\x35\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
+
     def fastApproachAbsolutePosition(self, position):
         cmd_id = '0048'
-        nbytes = '5'
-        unit = '1'
-        data = f'{unit}{position}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x05
+        unit = 0x01
+        position = binascii.hexlify(struct.pack('>f', position))
+        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        response = b''
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def slowApproachAbsolutePosition(self, position):
         cmd_id = '0049'
@@ -163,17 +206,23 @@ class LuigsAndNeumannSM10:
 
     def fastApproachRelativePosition(self, position):
         cmd_id = '004A'
-        nbytes = '5'
-        unit = '1'
-        data = f'{unit}{position}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x05
+        unit = 0x01
+        position = binascii.hexlify(struct.pack('>f', position))
+        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        response = b''
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def slowApproachRelativePosition(self, position):
         cmd_id = '004B'
-        nbytes = '5'
-        unit = '1'
-        data = f'{unit}{position}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x05
+        unit = 0x01
+        position = binascii.hexlify(struct.pack('>f', position))
+        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        response = b''
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setPositioningSpeedMode(self, speed_selection=0):
         """Set speed for positioning using stored coordinates
