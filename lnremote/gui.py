@@ -14,7 +14,8 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog,
                              QGridLayout, QGroupBox, QLineEdit, QListView,
                              QListWidget, QMainWindow, QMessageBox,
-                             QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFormLayout)
+                             QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFormLayout,
+                             QRadioButton, QButtonGroup)
 from manipulator import LuigsAndNeumannSM10
 
 class GUI(QMainWindow, LuigsAndNeumannSM10):
@@ -160,8 +161,8 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         subgrid.addWidget(self.goto_btn, 0, 1)
 
         self.zero_btn.clicked.connect(self.resetZeroCounterOneXYZ)
-        self.x_in_btn.clicked.connect(self.moveXIn)
-        self.x_out_btn.clicked.connect(self.moveXOut)
+        self.x_in_btn.clicked.connect(self.slowMoveXIn)
+        self.x_out_btn.clicked.connect(self.slowMoveXOut)
         self.stop_movement_x_btn.clicked.connect(self.stopMovement)
         self.goto_btn.clicked.connect(self.approachPositionDialog)
 
@@ -184,11 +185,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         if self.approach_win is None:
             self.approach_win = ApproachWindow()
         self.approach_win.submitGoTo.connect(self.slowApproachAbsolutePosition)
+        self.approach_win.submitSpeed.connect(self.setXSlowSpeed)
         self.approach_win.show()
 
 
 class ApproachWindow(QWidget):
     submitGoTo = pyqtSignal(float)
+    submitSpeed = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -222,18 +225,47 @@ class ApproachWindow(QWidget):
         micron_label.setFont(QFont('Helvetica', 14))
         micron_label.setStyleSheet('padding:2px')
 
+        speed_selection_group = QGroupBox('Speed')
+        self.grid.addWidget(speed_selection_group, 1, 1)
+
+        button_layout = QHBoxLayout()
+        speed_selection_group.setLayout(button_layout)
+
+        speed_group = QButtonGroup(self.grid)
+        speed_group.setExclusive(True)
+        self.slow_speed = QRadioButton('Slow')
+        self.medium_speed = QRadioButton('Medium')
+        self.fast_speed = QRadioButton('Fast')
+        speed_group.addButton(self.slow_speed)
+        speed_group.addButton(self.medium_speed)
+        speed_group.addButton(self.fast_speed)
+        button_layout.addWidget(self.slow_speed)
+        button_layout.addWidget(self.medium_speed)
+        button_layout.addWidget(self.fast_speed)
+
         self.go_btn = QPushButton('Go')
         self.go_btn.setStyleSheet('padding:20px')
         self.go_btn.setToolTip('Go to absolute position')
         self.go_btn.setMaximumWidth(150)
-        self.grid.addWidget(self.go_btn, 1, 1)
+        self.grid.addWidget(self.go_btn, 2, 1)
 
         self.go_btn.clicked.connect(self.getInputPosition)
+        speed_group.buttonClicked.connect(self.get_button_clicked)
 
     def getInputPosition(self):
         xcoord = float(self.goto_x.text())
         self.submitGoTo.emit(xcoord)
         self.close()
+
+    def get_button_clicked(self, button):
+        speed = button.text().lower()
+        if speed == 'slow':
+            velocity = 6
+        elif speed == 'medium':
+            velocity = 9
+        elif speed == 'fast':
+            velocity = 12
+        self.submitSpeed.emit(velocity)
 
 
 class Worker(QObject):
