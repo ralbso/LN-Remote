@@ -89,6 +89,7 @@ class LuigsAndNeumannSM10:
         # calculate CRC for command parameters
         (MSB, LSB) = self.calculateCRC(data, len(data))
 
+        print(data_n_bytes, len(data), data)
         if data_n_bytes != len(data):
             raise IndexError('The number of bytes sent does not match the data array.')
 
@@ -110,6 +111,31 @@ class LuigsAndNeumannSM10:
         
         with threading.Lock():
             self.manipulator.write(self.bytes_command)
+            if self._verbose:
+                print('Command sent')
+
+        n_loops = 0
+        while True:
+            ans = self.manipulator.read(resp_n_bytes)
+
+            if resp == None:
+                if self._verbose:
+                    print('Group command. No response expected.')
+                break
+
+            elif ans[:len(resp)] == resp:
+                if self._verbose and n_loops > 0:
+                    print('Response read')
+                break
+
+            elif n_loops >= 5:
+                warnings.warn('Command failed')
+                break
+
+            if self._verbose and n_loops > 0:
+                print('Unexpected answer: ', ans, len(ans))  
+
+            n_loops += 1
 
         # Solution #1: Hardcode access with boolean logic
         ## Didn't work as well as I thought. Commands get tangled.
@@ -161,12 +187,6 @@ class LuigsAndNeumannSM10:
 
     # COMMANDS
     def stepXIn(self, steps):
-        # cmd_id = '0147'
-        # nbytes = '2'
-        # unit = '1'
-        # steps = abs(steps)
-        # self.sendCommand(cmd_id, nbytes, unit, steps)
-        
         print('Step X In')
         cmd_id = '0140'
         nbytes = '1'
@@ -180,12 +200,6 @@ class LuigsAndNeumannSM10:
         self.sendCommand(cmd_id, nbytes, unit, resolution)
 
     def stepXOut(self, steps):
-        # cmd_id = '0147'
-        # nbytes = '2'
-        # unit = '1'
-        # steps = -steps
-        # self.sendCommand(cmd_id, nbytes, unit, steps)
-
         print('Step X Out')
         cmd_id = '0141'
         nbytes = '1'
@@ -209,8 +223,8 @@ class LuigsAndNeumannSM10:
     def fastMoveXIn(self):
         cmd_id = '0012'
         nbytes = 0x01
-        axis = 0x01
-        data = ([axis])
+        unit = 0x01
+        data = ([unit])
         response = 'b\x06\x00\x12\x00\xbb\xbb'
         response_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, response_n_bytes)
@@ -218,8 +232,8 @@ class LuigsAndNeumannSM10:
     def fastMoveXOut(self):
         cmd_id = '0013'
         nbytes = 0x01
-        axis = 0x01
-        data = ([axis])
+        unit = 0x01
+        data = ([unit])
         response = 'b\x06\x00\x13\x00\xbb\xbb'
         response_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, response_n_bytes)
@@ -227,8 +241,8 @@ class LuigsAndNeumannSM10:
     def slowMoveXOut(self):
         cmd_id = '0014'
         nbytes = 0x01
-        axis = 0x01
-        data = ([axis])
+        unit = 0x01
+        data = ([unit])
         response = b'\x06\x00\x14\x00\xbb\xbb'
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
@@ -236,30 +250,30 @@ class LuigsAndNeumannSM10:
     def slowMoveXIn(self):
         cmd_id = '0015'
         nbytes = 0x01
-        axis = 0x01
-        data = ([axis])
+        unit = 0x01
+        data = ([unit])
         response = b'\x06\x00\x15\x00\xbb\xbb'
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setXFastSpeed(self, velocity):
         assert isinstance(velocity, int)
-        assert (velocity >= 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
         cmd_id = '0134'
         nbytes = 0x02
-        axis = 0x01
-        data = ([axis, velocity])
+        unit = 0x01
+        data = ([unit, velocity])
         response = b'\x06\x01\x34\x00\xbb\xbb'
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setXSlowSpeed(self, velocity):
         assert isinstance(velocity, int)
-        assert (velocity >= 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
         cmd_id = '0135'
         nbytes = 0x02
-        axis = 0x01
-        data = ([axis, velocity])
+        unit = 0x01
+        data = ([unit, velocity])
         response = b'\x06\x01\x35\x00\xbb\xbb'
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
@@ -313,11 +327,12 @@ class LuigsAndNeumannSM10:
             Select speed for positioning. Can be 0 (slow) or 1 (fast). By default, 0.
         """
         cmd_id = '0191'
-        nbytes = '2'
-        unit = '1'
-        speed_selection = str(speed_selection)
-        data = f'{unit}{speed_selection}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x02
+        unit = 0x01
+        data = ([unit, speed_selection])
+        response = b'\x06\x01\x91\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setPositioningVelocityFast(self, velocity):
         """Set velocity for Fast positioning mode.
@@ -328,13 +343,15 @@ class LuigsAndNeumannSM10:
             Select unit velocity for fast positioning. Can be any integer between 0 and 16. By
             default, 0.
         """
+        assert isinstance(velocity, int)
         assert (velocity > 0 and velocity < 16)
         cmd_id = '0144'
-        nbytes = '2'
-        unit = '1'
-        velocity = str(velocity)
-        data = f'{unit}{velocity}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x02
+        unit = 0x01
+        data = ([unit, velocity])
+        response = b'\x06\x01\x44\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setPositioningVelocitySlow(self, velocity):
         """Set velocity for Slow positioning mode.
@@ -345,31 +362,39 @@ class LuigsAndNeumannSM10:
             Select unit velocity for slow positioning. Can be any integer between 0 and 16. By
             default, 0.
         """
+        assert isinstance(velocity, int)
         assert (velocity > 0 and velocity < 16)
         cmd_id = '018F'
-        nbytes = '2'
-        unit = '1'
-        velocity = str(velocity)
-        data = f'{unit}{velocity}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x02
+        unit = 0x01
+        data = ([unit, velocity])
+        response = b'\x06\x01\x8F\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setPositioningVelocityFastLinear(self, velocity):
+        assert isinstance(velocity, int)
         assert (velocity > 0 and velocity < 3000)
         cmd_id = '003D'
-        nbytes = '3'
-        unit = '1'
-        velocity = str(velocity)
-        data = f'{unit}{velocity}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x03
+        unit = 0x01
+        data = ([unit, velocity])
+        response = b'\x06\x00\x3D\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def setPositioningVelocitySlowLinear(self, velocity):
-        assert (velocity > 0 and velocity < 18000)
+        assert isinstance(velocity, int)
+        assert (velocity > 0 and velocity < 3000)
         cmd_id = '003C'
-        nbytes = '3'
-        unit = '1'
-        velocity = str(velocity)
-        data = f'{unit}{velocity}'
-        self.sendCommand(cmd_id, nbytes, data)
+        nbytes = 0x03
+        unit = 0x01
+        velocity = velocity.to_bytes(2, 'big')
+        velocity = [velocity[i:i+1] for i in range(len(velocity))]
+        data = ([unit, velocity[0], velocity[1]])
+        response = b'\x06\x00\x3C\x00\xbb\xbb'
+        resp_n_bytes = len(response)
+        self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
     def storeCurrentPosition(self, slot_number):
         assert (slot_number > 0 and slot_number <= 5)
@@ -389,13 +414,13 @@ class LuigsAndNeumannSM10:
         data = f'{unit}{slot_number}'
         self.sendCommand(cmd_id, nbytes, data)
 
-    def switchAxisOff(self, unit):
+    def switchunitOff(self, unit):
         cmd_id = '0034'
         nbytes = '1'
         unit = str(unit)
         self.sendCommand(cmd_id, nbytes, unit)
 
-    def switchAxisOn(self, unit):
+    def switchunitOn(self, unit):
         cmd_id = '0035'
         nbytes = '1'
         unit = str(unit)
@@ -434,7 +459,7 @@ class LuigsAndNeumannSM10:
         data = f'{unit}{direction}'
         self.sendCommand(cmd_id, nbytes, data)
 
-    def returnAxisHome(self, unit):
+    def returnunitHome(self, unit):
         assert (unit >= 1 and unit <= 3)
         cmd_id = '0022'
         nbytes = '1'
@@ -460,7 +485,7 @@ class LuigsAndNeumannSM10:
         unit = str(unit)
         self.sendCommand(cmd_id, nbytes, unit)
 
-    def moveAxisToZero(self, unit):
+    def moveunitToZero(self, unit):
         assert (unit >= 1 and unit <= 3)
         cmd_id = '0024'
         nbytes = '1'
@@ -761,7 +786,11 @@ class LuigsAndNeumannSM10:
         crc_polynom = 0x1021
         crc = 0
         n = 0
-        print('data bytes', data_bytes)
+        
+        for idx, val in enumerate(data_bytes):
+            if isinstance(val, bytes):
+                data_bytes[idx] = int.from_bytes(val, 'big')
+
         while length > 0:
             crc = crc ^ data_bytes[n] << 8
             for i in np.arange(8):
