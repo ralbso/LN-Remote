@@ -13,16 +13,10 @@ import binascii
 import ctypes
 import struct
 import warnings
+import threading
 
 import serial
 import serial.tools.list_ports
-from PyQt5 import QtGui, QtWidgets, QtCore
-from PyQt5.QtCore import QObject, QRect, QSize, QThread, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog,
-                             QGridLayout, QGroupBox, QLineEdit, QListView,
-                             QListWidget, QMainWindow, QMessageBox,
-                             QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFormLayout)
 
 
 class LuigsAndNeumannSM10:
@@ -54,11 +48,19 @@ class LuigsAndNeumannSM10:
 
         # establish serial connection
         serial_number = 'AQ01JPC8A'
-        self.device = self.find_manipulator(serial_number)
-        self.manipulator = self.establish_serial_connection(self.device, self._reset_timer)
+        self.device = self.findManipulator(serial_number)
+        self.manipulator = self.establishSerialConnection(self.device, self._reset_timer)
+
+    def __del__(self):
+        try:
+            self.manipulator.close()
+        except AttributeError:
+            pass
+        if self._verbose:
+            print('Connection to SM10 closed.')
 
     @staticmethod
-    def find_manipulator(serial_number):
+    def findManipulator(serial_number):
         comports = serial.tools.list_ports.comports()
         try:
             for comport in comports:
@@ -71,12 +73,90 @@ class LuigsAndNeumannSM10:
         except Exception:
             raise IOError('Could not find manipulator... Is it connected?')
 
-    def establish_serial_connection(self, device, timeout):
+    def establishSerialConnection(self, device, timeout):
         if self._verbose:
             print('Connecting...')
         ser = serial.Serial(device, baudrate=115200, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout)
-        print(f'Connected to SM10 on {device}')
+        if self._verbose:
+            print(f'Connected to SM10 on {device}.')
         return ser
+
+        # SEND COMMANDS
+    def sendCommand(self, cmd_id, data_n_bytes, data, resp, resp_n_bytes=0):
+        self._just_wrote = False
+
+        # calculate CRC for command parameters
+        (MSB, LSB) = self.calculateCRC(data, len(data))
+
+        if data_n_bytes != len(data):
+            raise IndexError('The number of bytes sent does not match the data array.')
+
+        # compile full command string
+        command = self.SYN + cmd_id + '%0.2X' % data_n_bytes
+        for i in range(len(data)):
+            command += '%0.2X' % data[i]
+        command += '%0.2X%0.2X' % (MSB, LSB)
+
+        # convert command to bytes for COM interface
+        self.bytes_command = binascii.unhexlify(command)
+
+        if self._verbose:
+            print(cmd_id, command, MSB, LSB)
+
+        ##### experimental. How can we split writing streams appropriately?
+
+        # Solution #2: Thread locks
+        
+        with threading.Lock():
+            self.manipulator.write(self.bytes_command)
+
+        # Solution #1: Hardcode access with boolean logic
+        ## Didn't work as well as I thought. Commands get tangled.
+
+        # print('Can command?', self._can_write_cmd)
+        # if self._can_write_cmd and cmd_id == 'A101':
+        #     self._can_write_cmd = False
+        #     self.manipulator.write(self.bytes_command)
+        #     self._just_wrote = True
+
+        #     if self._verbose:
+        #         print('Position inquiry sent')
+                
+        # if self._can_write_cmd and cmd_id != 'A101':
+        #     self.manipulator.write(self.bytes_command)
+        #     self._just_wrote = True
+
+        #     if self._verbose:
+        #         print('Command sent')
+
+        # time.sleep(1)
+        # n_loops = 0
+        # if self._just_wrote:
+        #     while True:
+        #         ans = self.manipulator.read(resp_n_bytes)
+
+        #         if resp == None:
+        #             if self._verbose:
+        #                 print('Group command. No response expected.')
+        #             break
+
+        #         elif ans[:len(resp)] == resp:
+        #             if self._verbose and n_loops > 0:
+        #                 print('Response read')
+        #             break
+
+        #         elif n_loops >= 5:
+        #             warnings.warn('Command failed')
+        #             break
+
+        #         if self._verbose and n_loops > 0:
+        #             print('Unexpected answer: ', ans, len(ans))  
+
+        #         n_loops += 1
+
+        #     self._just_wrote = False
+
+            return ans
 
     # COMMANDS
     def stepXIn(self, steps):
@@ -619,74 +699,6 @@ class LuigsAndNeumannSM10:
         data = f'{group_flag}{unit1}{unit2}{unit3}'
         self.sendCommand(cmd_id, nbytes, data)
 
-    # SEND COMMANDS
-    def sendCommand(self, cmd_id, data_n_bytes, data, resp, resp_n_bytes=0):
-        self._just_wrote = False
-
-        # calculate CRC for command parameters
-        (MSB, LSB) = self.calculateCRC(data, len(data))
-
-        if data_n_bytes != len(data):
-            raise IndexError('The number of bytes sent does not match the data array.')
-
-        # compile full command string
-        command = self.SYN + cmd_id + '%0.2X' % data_n_bytes
-        for i in range(len(data)):
-            command += '%0.2X' % data[i]
-        command += '%0.2X%0.2X' % (MSB, LSB)
-
-        # convert command to bytes for COM interface
-        self.bytes_command = binascii.unhexlify(command)
-
-        if self._verbose:
-            print(cmd_id, command, MSB, LSB)
-
-        ##### experimental. How can we split writing streams appropriately?
-
-        print('Can command?', self._can_write_cmd)
-        if self._can_write_cmd and cmd_id == 'A101':
-            self._can_write_cmd = False
-            self.manipulator.write(self.bytes_command)
-            self._just_wrote = True
-
-            if self._verbose:
-                print('Position inquiry sent')
-                
-        if self._can_write_cmd and cmd_id != 'A101':
-            self.manipulator.write(self.bytes_command)
-            self._just_wrote = True
-
-            if self._verbose:
-                print('Command sent')
-
-        time.sleep(1)
-        n_loops = 0
-        if self._just_wrote:
-            while True:
-                ans = self.manipulator.read(resp_n_bytes)
-
-                if resp == None:
-                    if self._verbose:
-                        print('Group command. No response expected.')
-                    break
-
-                elif ans[:len(resp)] == resp:
-                    if self._verbose and n_loops > 0:
-                        print('Response read')
-                    break
-
-                elif n_loops >= 5:
-                    warnings.warn('Command failed')
-                    break
-
-                if self._verbose and n_loops > 0:
-                    print('Unexpected answer: ', ans, len(ans))  
-
-                n_loops += 1
-
-            self._just_wrote = False
-
-            return ans
 
     # CRC Calculation
     @staticmethod
