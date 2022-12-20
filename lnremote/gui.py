@@ -35,6 +35,8 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
         self.approach_win = None
 
+        self.setPositioningSpeedMode(speed_selection=0)
+
     def startThread(self):
         self.thread = QThread()
         self.worker = Worker(self.updatePositions)
@@ -171,21 +173,17 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.read_x.selectAll()
         self.read_y.selectAll()
         self.read_z.selectAll()
-        try:
-            self.read_x.insert(str(round(positions[0], 2)))
-            self.read_y.insert(str(round(positions[1], 2)))
-            self.read_z.insert(str(round(positions[2], 2)))
-            self.positions_cache = positions
-        except:
-            self.read_x.insert(str(round(self.positions_cache[0], 2)))
-            self.read_y.insert(str(round(self.positions_cache[1], 2)))
-            self.read_z.insert(str(round(self.positions_cache[2], 2)))
+
+        self.read_x.insert(str(round(positions[0], 2)))
+        self.read_y.insert(str(round(positions[1], 2)))
+        self.read_z.insert(str(round(positions[2], 2)))
+        self.positions_cache = positions
 
     def approachPositionDialog(self):
         if self.approach_win is None:
             self.approach_win = ApproachWindow()
         self.approach_win.submitGoTo.connect(self.slowApproachAbsolutePosition)
-        self.approach_win.submitSpeed.connect(self.setXSlowSpeed)
+        self.approach_win.submitSpeed.connect(self.setPositioningVelocitySlow)
         self.approach_win.show()
 
 
@@ -262,9 +260,9 @@ class ApproachWindow(QWidget):
         if speed == 'slow':
             velocity = 6
         elif speed == 'medium':
-            velocity = 9
+            velocity = 7
         elif speed == 'fast':
-            velocity = 12
+            velocity = 8
         self.submitSpeed.emit(velocity)
 
 
