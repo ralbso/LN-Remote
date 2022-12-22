@@ -6,7 +6,6 @@ Created on: 10/14/2022 14:56:24
 Author: rmojica
 """
 
-import sys
 import time
 import numpy as np
 import binascii
@@ -14,7 +13,7 @@ import ctypes
 import struct
 import warnings
 import threading
-
+import queue
 import serial
 import serial.tools.list_ports
 
@@ -31,26 +30,28 @@ class LuigsAndNeumannSM10:
 
     # Define group addresses to control groups of axes on unit 1
     # TODO: allow user to select units and axes and decode the group address
-    GROUPADDRESSXYZ = [0,0,0,0,0,0,0,0,7]
-    GROUPADDRESSYZ = [0,0,0,0,0,0,0,0,6]
-    GROUPADDRESSXZ = [0,0,0,0,0,0,0,0,5]
-    GROUPADDRESSXY = [0,0,0,0,0,0,0,0,3]
-    GROUPADDRESSX = [0,0,0,0,0,0,0,0,1]
-
-    full_command = ''
+    GROUPADDRESSXYZ = [0, 0, 0, 0, 0, 0, 0, 0, 7]
+    GROUPADDRESSYZ = [0, 0, 0, 0, 0, 0, 0, 0, 6]
+    GROUPADDRESSXZ = [0, 0, 0, 0, 0, 0, 0, 0, 5]
+    GROUPADDRESSXY = [0, 0, 0, 0, 0, 0, 0, 0, 3]
+    GROUPADDRESSX = [0, 0, 0, 0, 0, 0, 0, 0, 1]
 
     def __init__(self):
         super().__init__()
         self._calibrated = False
         self._inside_brain = False
         self._can_write_cmd = True
-        self._reset_timer = 0.1
+        self._timeout = 0.01
         self._verbose = True
+
+        self.full_command = ''
+        self.cmd_lock = threading.Lock()
 
         # establish serial connection
         serial_number = 'AQ01JPBXA'
         self.device = self.findManipulator(serial_number)
-        self.manipulator = self.establishSerialConnection(self.device, self._reset_timer)
+        self.manipulator = self.establishSerialConnection(
+            self.device, self._timeout)
 
     def __del__(self):
         try:
@@ -77,21 +78,25 @@ class LuigsAndNeumannSM10:
     def establishSerialConnection(self, device, timeout):
         if self._verbose:
             print('Connecting...')
-        ser = serial.Serial(device, baudrate=115200, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout)
+        ser = serial.Serial(device, baudrate=115200, bytesize=serial.EIGHTBITS,
+                            parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, 
+                            timeout=timeout, write_timeout=2)
         if self._verbose:
             print(f'Connected to SM10 on {device}.')
         return ser
 
         # SEND COMMANDS
     def sendCommand(self, cmd_id, data_n_bytes, data, resp, resp_n_bytes=0):
-        self._just_wrote = False
 
         # calculate CRC for command parameters
         (MSB, LSB) = self.calculateCRC(data, len(data))
+        
+        if self._verbose:
+            print(data_n_bytes, len(data), data)
 
-        print(data_n_bytes, len(data), data)
         if data_n_bytes != len(data):
-            raise IndexError('The number of bytes sent does not match the data array.')
+            raise IndexError(
+                'The number of bytes sent does not match the data array.')
 
         # compile full command string
         command = self.SYN + cmd_id + '%0.2X' % data_n_bytes
@@ -104,84 +109,50 @@ class LuigsAndNeumannSM10:
 
         if self._verbose:
             print(cmd_id, command, MSB, LSB)
+            print('Raw command:', self.bytes_command)
 
-        ##### experimental. How can we split writing streams appropriately?
+        # How can we split writing streams appropriately?
 
-        # Solution #2: Thread locks
-        
-        with threading.Lock():
-            self.manipulator.write(self.bytes_command)
-            if self._verbose:
-                print('Command sent')
+        # Solution #2: Thread locks and queues
 
-        n_loops = 0
-        while True:
-            ans = self.manipulator.read(resp_n_bytes)
-
-            if resp == None:
+        if resp_n_bytes == 0:
+            with self.cmd_lock:
+                self.manipulator.write(self.bytes_command)
                 if self._verbose:
-                    print('Group command. No response expected.')
-                break
+                    print('Command sent')
+                return None
+        
+        else:
+            with self.cmd_lock:
+                self.manipulator.write(self.bytes_command)
+                if self._verbose:
+                    print('Command sent')
 
-            elif ans[:len(resp)] == resp:
-                if self._verbose and n_loops > 0:
-                    print('Response read')
-                break
+                expected_response = binascii.unhexlify('06' + cmd_id)
+                time.sleep(0.01)
+                ans = self.manipulator.read(resp_n_bytes)
 
-            elif n_loops >= 5:
-                warnings.warn('Command failed')
-                break
+                if self._verbose:
+                    print('Raw response:', ans)
 
-            if self._verbose and n_loops > 0:
-                print('Unexpected answer: ', ans, len(ans))  
+                read_attempts = 0
+                while len(ans) < resp_n_bytes:
+                    if read_attempts >= 5:
+                        # self.manipulator.write(self.bytes_command)
+                        ans = self.manipulator.read(resp_n_bytes)
 
-            n_loops += 1
+                        if not len(ans) == resp_n_bytes:
+                            raise serial.SerialException(f'Could not get a response from manipulator for command {cmd_id}')
+                        else:
+                            break
+                    
+                    print(f'Only received {len(ans)}/{resp_n_bytes} bytes. Attempting to read again.')
+                    ans += self.manipulator.read(resp_n_bytes - len(ans))
+                    read_attempts += 1
 
-        # Solution #1: Hardcode access with boolean logic
-        ## Didn't work as well as I thought. Commands get tangled.
-
-        # print('Can command?', self._can_write_cmd)
-        # if self._can_write_cmd and cmd_id == 'A101':
-        #     self._can_write_cmd = False
-        #     self.manipulator.write(self.bytes_command)
-        #     self._just_wrote = True
-
-        #     if self._verbose:
-        #         print('Position inquiry sent')
-                
-        # if self._can_write_cmd and cmd_id != 'A101':
-        #     self.manipulator.write(self.bytes_command)
-        #     self._just_wrote = True
-
-        #     if self._verbose:
-        #         print('Command sent')
-
-        # time.sleep(1)
-        # n_loops = 0
-        # if self._just_wrote:
-        #     while True:
-        #         ans = self.manipulator.read(resp_n_bytes)
-
-        #         if resp == None:
-        #             if self._verbose:
-        #                 print('Group command. No response expected.')
-        #             break
-
-        #         elif ans[:len(resp)] == resp:
-        #             if self._verbose and n_loops > 0:
-        #                 print('Response read')
-        #             break
-
-        #         elif n_loops >= 5:
-        #             warnings.warn('Command failed')
-        #             break
-
-        #         if self._verbose and n_loops > 0:
-        #             print('Unexpected answer: ', ans, len(ans))  
-
-        #         n_loops += 1
-
-        #     self._just_wrote = False
+            # if ans[:len(expected_response)] != expected_response:
+            #     e = f'Expected {binascii.hexlify(expected_response)}, but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
+            #     raise serial.SerialException(e)
 
             return ans
 
@@ -283,7 +254,8 @@ class LuigsAndNeumannSM10:
         nbytes = 0x05
         unit = 0x01
         position = binascii.hexlify(struct.pack('>f', position))
-        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        data = ([unit, int(position[:6], 16), int(position[4:6], 16),
+                 int(position[2:4], 16), int(position[:2], 16)])
         response = b''
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
@@ -292,8 +264,9 @@ class LuigsAndNeumannSM10:
         cmd_id = '0049'
         nbytes = 0x05
         unit = 0x01
-        position = binascii.hexlify(struct.pack('>f', position))
-        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        position = bytearray(struct.pack('f', position))
+
+        data = ([unit] + list(position))
         response = b''
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
@@ -302,8 +275,9 @@ class LuigsAndNeumannSM10:
         cmd_id = '004A'
         nbytes = 0x05
         unit = 0x01
-        position = binascii.hexlify(struct.pack('>f', position))
-        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        position = binascii.hexlify(struct.pack('f', position))
+        data = ([unit, int(position[:6], 16), int(position[4:6], 16),
+                 int(position[2:4], 16), int(position[:2], 16)])
         response = b''
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
@@ -312,8 +286,13 @@ class LuigsAndNeumannSM10:
         cmd_id = '004B'
         nbytes = 0x05
         unit = 0x01
-        position = binascii.hexlify(struct.pack('>f', position))
-        data = ([unit, int(position[:6],16), int(position[4:6], 16), int(position[2:4], 16), int(position[:2], 16)])
+        position = binascii.hexlify(struct.pack('f', position))
+        # (MSB, LSB) = self.calculateCRC(position, len(position))
+        # data = ([unit, LSB, int(position[4:6], 16),
+        #          int(position[2:4], 16), MSB])
+        # data = ([unit, int(position[:6], 16), int(position[2:4], 16), 
+        #           int(position[4:6], 16), int(position[:2], 16)])
+        data = ([unit, position])
         response = b''
         resp_n_bytes = len(response)
         self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
@@ -755,11 +734,12 @@ class LuigsAndNeumannSM10:
         response = b'\x06\xa1\x01\x14'
         # response: <ACK><ID1><ID2><14><UNIT1><UNIT2><UNIT3><flPOS1><flPOS2><flPOS3><CRC>
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <4>     <4>     <4>     <total: 20>
-        resp_n_bytes = 28
+        resp_n_bytes = 26
+        time.sleep(1)
         ans = self.sendCommand(cmd_id, nbytes, data, response, resp_n_bytes)
 
         if self._verbose:
-            print(ans)
+            print('Updating position')
 
         try:
             ans_decoded = [struct.unpack('f', ans[8:12])[0],
@@ -779,14 +759,14 @@ class LuigsAndNeumannSM10:
         data = f'{group_flag}{unit1}{unit2}{unit3}'
         self.sendCommand(cmd_id, nbytes, data)
 
-
     # CRC Calculation
+
     @staticmethod
     def calculateCRC(data_bytes, length):
-        crc_polynom = 0x1021
+        crc_polynomial = 0x1021
         crc = 0
         n = 0
-        
+
         for idx, val in enumerate(data_bytes):
             if isinstance(val, bytes):
                 data_bytes[idx] = int.from_bytes(val, 'big')
@@ -795,10 +775,10 @@ class LuigsAndNeumannSM10:
             crc = crc ^ data_bytes[n] << 8
             for i in np.arange(8):
                 if (crc & 0x8000):
-                    crc = crc << 1 ^ crc_polynom
+                    crc = crc << 1 ^ crc_polynomial
                 else:
                     crc = crc << 1
-            
+
             length -= 1
             n += 1
 
@@ -806,5 +786,3 @@ class LuigsAndNeumannSM10:
         crcLSB = ctypes.c_ubyte(crc)
 
         return (crcMSB.value, crcLSB.value)
-
-
