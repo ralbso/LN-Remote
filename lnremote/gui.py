@@ -168,14 +168,14 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.goto_btn.setToolTip('Go to absolute coordinates')
         subgrid.addWidget(self.goto_btn, 0, 1)
 
-        self.zero_btn.clicked.connect(self.resetZeroCounterOneXYZ)
-        self.x_in_btn.clicked.connect(self.slowMoveXIn)
-        self.x_out_btn.clicked.connect(self.slowMoveXOut)
-        self.stop_movement_x_btn.clicked.connect(self.stopMovement)
+        self.zero_btn.clicked.connect(self.resetAxesZero)
+        self.x_in_btn.clicked.connect(lambda: self.moveAxis(1, 0, -1))
+        self.x_out_btn.clicked.connect(lambda: self.moveAxis(1, 0, 1))
+        self.stop_movement_x_btn.clicked.connect(lambda: self.stopMovement(1))
         self.goto_btn.clicked.connect(self.approachPositionDialog)
 
     def updatePositions(self):
-        positions = self.readXYZManipulator()
+        positions = self.readManipulator([1,2,3])
 
         if positions != b'' and positions is not None:
             # print(positions)
@@ -190,13 +190,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
     def approachPositionDialog(self):
         if self.approach_win is None:
             self.approach_win = ApproachWindow()
-        self.approach_win.submitGoTo.connect(self.slowApproachAbsolutePosition)
+        self.approach_win.submitGoTo.connect(self.approachAxesPosition)
         self.approach_win.submitSpeed.connect(self.setPositioningVelocitySlow)
         self.approach_win.show()
 
 
 class ApproachWindow(QWidget):
-    submitGoTo = pyqtSignal(float)
+    submitGoTo = pyqtSignal(list, float, list, int)
     submitSpeed = pyqtSignal(int)
 
     def __init__(self):
@@ -261,7 +261,7 @@ class ApproachWindow(QWidget):
     def getInputPosition(self):
         try:
             xcoord = float(self.goto_x.text())
-            self.submitGoTo.emit(xcoord)
+            self.submitGoTo.emit([1], 0, [xcoord], 0)
         except ValueError:
             pass        
         self.close()
