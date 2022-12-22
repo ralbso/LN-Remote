@@ -7,6 +7,7 @@ Author: rmojica
 """
 
 import sys
+import time
 
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtCore import QObject, QRect, QSize, QThread, pyqtSignal, pyqtSlot
@@ -31,11 +32,11 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
         self.createGrid()
         # self.updatePositions()
-        # self.startThread()
+        self.startThread()
 
         self.approach_win = None
 
-        self.setPositioningSpeedMode(speed_selection=0)
+        # self.setPositioningSpeedMode(speed_selection=0)
 
     def startThread(self):
         self.thread = QThread()
@@ -80,12 +81,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
         axis_label = QLabel('X')
         axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:20px')
+        axis_label.setStyleSheet('padding:5px')
         subgrid.addWidget(axis_label, 0, 0)
 
         self.read_x = QLineEdit('')
         self.read_x.setStyleSheet('padding:20px')
         self.read_x.setToolTip('Position of X Axis')
+        self.read_x.setFont(QFont('Helvetica', 14))
         self.read_x.setReadOnly(True)
         self.read_x.setMaximumWidth(150)
         # subgrid.addRow(axis_label, self.read_x)
@@ -98,12 +100,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         
         axis_label = QLabel('Y')
         axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:20px')
+        axis_label.setStyleSheet('padding:5px')
         subgrid.addWidget(axis_label, 1, 0)
 
         self.read_y = QLineEdit('')
         self.read_y.setStyleSheet('padding:20px')
         self.read_y.setToolTip('Position of Y Axis')
+        self.read_y.setFont(QFont('Helvetica', 14))
         self.read_y.setReadOnly(True)
         self.read_y.setMaximumWidth(150)
         # subgrid.addRow(axis_label, self.read_y)
@@ -116,12 +119,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
         axis_label = QLabel('Z')
         axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:20px')
+        axis_label.setStyleSheet('padding:5px')
         subgrid.addWidget(axis_label, 2, 0)
 
         self.read_z = QLineEdit('')
         self.read_z.setStyleSheet('padding:20px')
         self.read_z.setToolTip('Position of Z Axis')
+        self.read_z.setFont(QFont('Helvetica', 14))
         self.read_z.setReadOnly(True)
         self.read_z.setMaximumWidth(150)
         # subgrid.addRow(axis_label, self.read_z)
@@ -139,6 +143,8 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.zero_btn = QPushButton('Zero Axes')
         self.zero_btn.setStyleSheet('padding:20px')
         self.zero_btn.setToolTip('Zero all axes')
+        # self.zero_btn.
+        
         subgrid.addWidget(self.zero_btn, 0, 0)
 
         # create buttons to move X axis in and out
@@ -170,14 +176,16 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
     def updatePositions(self):
         positions = self.readXYZManipulator()
-        self.read_x.selectAll()
-        self.read_y.selectAll()
-        self.read_z.selectAll()
 
-        self.read_x.insert(str(round(positions[0], 2)))
-        self.read_y.insert(str(round(positions[1], 2)))
-        self.read_z.insert(str(round(positions[2], 2)))
-        self.positions_cache = positions
+        if positions != b'' and positions is not None:
+            # print(positions)
+            self.read_x.selectAll()
+            self.read_y.selectAll()
+            self.read_z.selectAll()
+
+            self.read_x.insert(str(round(positions[0], 2)))
+            self.read_y.insert(str(round(positions[1], 2)))
+            self.read_z.insert(str(round(positions[2], 2)))
 
     def approachPositionDialog(self):
         if self.approach_win is None:
@@ -248,17 +256,20 @@ class ApproachWindow(QWidget):
         self.grid.addWidget(self.go_btn, 2, 1)
 
         self.go_btn.clicked.connect(self.getInputPosition)
-        speed_group.buttonClicked.connect(self.get_button_clicked)
+        speed_group.buttonClicked.connect(self.getButtonClicked)
 
     def getInputPosition(self):
-        xcoord = float(self.goto_x.text())
-        self.submitGoTo.emit(xcoord)
+        try:
+            xcoord = float(self.goto_x.text())
+            self.submitGoTo.emit(xcoord)
+        except ValueError:
+            pass        
         self.close()
 
-    def get_button_clicked(self, button):
+    def getButtonClicked(self, button):
         speed = button.text().lower()
         if speed == 'slow':
-            velocity = 6
+            velocity = 6    # 3 um/s 
         elif speed == 'medium':
             velocity = 7
         elif speed == 'fast':
