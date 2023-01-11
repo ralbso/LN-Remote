@@ -21,7 +21,7 @@ from manipulator import LuigsAndNeumannSM10
 
 class GUI(QMainWindow, LuigsAndNeumannSM10):
 
-    def __init__(self):
+    def __init__(self, connection_type):
         super().__init__()
 
         # set up GUI
@@ -30,9 +30,12 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.setMinimumWidth(400)
         self.setFont(QFont('Helvetica', 14))
 
+        self.initializeManipulator(connection_type=connection_type)
+
         self.createGrid()
         # self.updatePositions()
-        self.startThread()
+        if connection_type == 'socket':
+            self.startThread()
 
         self.approach_win = None
 
@@ -191,13 +194,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         if self.approach_win is None:
             self.approach_win = ApproachWindow()
         self.approach_win.submitGoTo.connect(self.approachAxesPosition)
-        self.approach_win.submitSpeed.connect(self.setPositioningVelocitySlow)
+        self.approach_win.submitSpeed.connect(self.setPositioningVelocity)
         self.approach_win.show()
 
 
 class ApproachWindow(QWidget):
     submitGoTo = pyqtSignal(list, float, list, int)
-    submitSpeed = pyqtSignal(int)
+    submitSpeed = pyqtSignal(list, int, int)
 
     def __init__(self):
         super().__init__()
@@ -274,7 +277,7 @@ class ApproachWindow(QWidget):
             velocity = 7
         elif speed == 'fast':
             velocity = 8
-        self.submitSpeed.emit(velocity)
+        self.submitSpeed.emit([1], 0, velocity)
 
 
 class Worker(QObject):
@@ -302,6 +305,6 @@ if __name__ == "__main__":
     #     pass
 
     app = QtWidgets.QApplication([])
-    mainWin = GUI()
+    mainWin = GUI(connection_type='socket')
     mainWin.show()
     sys.exit(app.exec())
