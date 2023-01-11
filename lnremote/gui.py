@@ -170,7 +170,7 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.goto_btn.setToolTip('Go to absolute coordinates')
         subgrid.addWidget(self.goto_btn, 0, 1)
 
-        self.zero_btn.clicked.connect(self.resetAxesZero)
+        self.zero_btn.clicked.connect(lambda: self.resetAxesZero([1, 2, 3]))
         self.x_in_btn.clicked.connect(lambda: self.moveAxis(1, 0, -1))
         self.x_out_btn.clicked.connect(lambda: self.moveAxis(1, 0, 1))
         self.stop_movement_x_btn.clicked.connect(lambda: self.stopMovement(1))
