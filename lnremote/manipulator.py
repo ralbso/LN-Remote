@@ -14,6 +14,7 @@ import struct
 import warnings
 import threading
 import queue
+import socket
 import serial
 import serial.tools.list_ports
 
@@ -47,18 +48,14 @@ class LuigsAndNeumannSM10:
         self.full_command = ''
         self.cmd_lock = threading.Lock()
 
-        # establish serial connection
-        serial_number = 'AQ01JPBXA'
-        self.device = self.findManipulator(serial_number)
-        self.manipulator = self.establishSerialConnection(
-            self.device, self._timeout)
+        # self.initializeManipulator()
 
     def __del__(self):
         try:
             self.manipulator.close()
         except AttributeError:
             pass
-        if self._verbose:
+        finally:
             print('Connection to SM10 closed.')
 
     @staticmethod
@@ -84,6 +81,19 @@ class LuigsAndNeumannSM10:
         if self._verbose:
             print(f'Connected to SM10 on {device}.')
         return ser
+
+    def initializeManipulator(self, connection_type='socket'):
+        self.type = connection_type
+        # establish serial connection
+        if connection_type == 'serial':
+            serial_number = 'AQ01JPBXA'
+            self.device = self.findManipulator(serial_number)
+            self.manipulator = self.establishSerialConnection(
+                self.device, self._timeout)
+
+        elif connection_type == 'socket':
+            self.ip = '192.168.172.30'
+            self.port = 1001
 
         # SEND COMMANDS
     def sendCommand(self, cmd_id, data_n_bytes, data, resp_nbytes=0):
@@ -111,50 +121,60 @@ class LuigsAndNeumannSM10:
             print(cmd_id, command, MSB, LSB)
             print('Raw command:', self.bytes_command)
 
-        # How can we split writing streams appropriately?
+        # dealing with serial has proven to be quite limiting and challenging
+        if self.type == 'serial':
+            if resp_nbytes == 0:
+                with self.cmd_lock:
+                    self.manipulator.write(self.bytes_command)
 
-        # Solution #2: Thread locks and queues
+                    if self._verbose:
+                        print('Command sent')
+                    return None
+            
+            else:
+                with self.cmd_lock:
+                    self.manipulator.write(self.bytes_command)
 
-        if resp_nbytes == 0:
-            with self.cmd_lock:
-                self.manipulator.write(self.bytes_command)
-                if self._verbose:
-                    print('Command sent')
-                return None
-        
-        else:
-            with self.cmd_lock:
-                self.manipulator.write(self.bytes_command)
-                if self._verbose:
-                    print('Command sent')
+                    if self._verbose:
+                        print('Command sent')
 
-                expected_response = binascii.unhexlify('06' + cmd_id)
-                time.sleep(0.01)
-                ans = self.manipulator.read(resp_nbytes)
+                    expected_response = binascii.unhexlify('06' + cmd_id)
+                    time.sleep(0.01)
 
-                if self._verbose:
-                    print('Raw response:', ans)
+                    ans = self.manipulator.read(resp_nbytes)
 
-                read_attempts = 0
-                while len(ans) < resp_nbytes:
-                    if read_attempts >= 5:
-                        # self.manipulator.write(self.bytes_command)
-                        ans = self.manipulator.read(resp_nbytes)
+                    if self._verbose:
+                        print('Raw response:', ans)
 
-                        if not len(ans) == resp_nbytes:
-                            raise serial.SerialException(f'Could not get a response from manipulator for command {cmd_id}')
-                        else:
-                            break
-                    
-                    print(f'Only received {len(ans)}/{resp_nbytes} bytes. Attempting to read again.')
-                    ans += self.manipulator.read(resp_nbytes - len(ans))
-                    read_attempts += 1
+                    read_attempts = 0
+                    while len(ans) < resp_nbytes:
+                        if read_attempts >= 5:
+                            # self.manipulator.write(self.bytes_command)
+                            ans = self.manipulator.read(resp_nbytes)
 
-            if ans[:len(expected_response)] != expected_response:
-                e = f'Expected {binascii.hexlify(expected_response)}, but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
-                raise serial.SerialException(e)
+                            if not len(ans) == resp_nbytes:
+                                raise serial.SerialException(f'Could not get a response from manipulator for command {cmd_id}')
+                            else:
+                                break
+                        
+                        print(f'Only received {len(ans)}/{resp_nbytes} bytes. Attempting to read again.')
+                        ans += self.manipulator.read(resp_nbytes - len(ans))
+                        read_attempts += 1
 
-            return ans
+                if ans[:len(expected_response)] != expected_response:
+                    e = f'Expected {binascii.hexlify(expected_response)}, but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
+                    raise serial.SerialException(e)
+
+        elif self.type == 'socket':
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.ip, self.port))
+                s.sendall(self.bytes_command)
+                if resp_nbytes == 0:
+                    ans = None
+                else:
+                    ans = s.recv(resp_nbytes)
+
+        return ans
 
     # COMMANDS
     def stepAxis(self, axis, steps, resolution):
@@ -366,7 +386,7 @@ class LuigsAndNeumannSM10:
         """
         cmd_id = '0191'
         nbytes = 2
-        data = ([axis, speed_mode])
+        data = (axis + [speed_mode])
         resp_nbytes = 4
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
@@ -391,7 +411,7 @@ class LuigsAndNeumannSM10:
             cmd_id = '018F'
 
         nbytes = 2
-        data = ([axis, velocity])
+        data = (axis + [velocity])
         resp_nbytes = 4
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
@@ -913,7 +933,7 @@ class LuigsAndNeumannSM10:
         data = ([group_flag] + group + [slot_number])
         self.sendCommand(cmd_id, nbytes, data)
 
-    def approachAxesPosition(self, axes, slot_number, velocity):
+    def approachStoredAxesPosition(self, axes, slot_number, velocity):
         """Approach position stored in `slot_number`.
 
 
@@ -1065,7 +1085,7 @@ class LuigsAndNeumannSM10:
 
         pos = self.convertToFloatBytes(pos)
 
-        nbytes = 15
+        nbytes = 4 + len(axes) + len(positions)*4
         group_flag = 0xA0
         data = ([group_flag] + adr + pos)
 
@@ -1084,11 +1104,8 @@ class LuigsAndNeumannSM10:
         # response: <ACK><ID1><ID2><14><axis1><axis2><axis3><axis4><flPOS1><flPOS2><flPOS3><flPOS4><MSB><LSB>
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
-        time.sleep(1)
+        time.sleep(0.250)
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
-
-        if self._verbose:
-            print('Updating position')
 
         try:
             ans_decoded = [struct.unpack('f', ans[8:12])[0],
