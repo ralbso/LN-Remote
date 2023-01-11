@@ -95,6 +95,9 @@ class LuigsAndNeumannSM10:
             self.ip = '192.168.172.30'
             self.port = 1001
 
+        elif connection_type == 'dummy':
+            print('Initializing dummy manipulator.')
+
         # SEND COMMANDS
     def sendCommand(self, cmd_id, data_n_bytes, data, resp_nbytes=0):
 
@@ -173,6 +176,10 @@ class LuigsAndNeumannSM10:
                     ans = None
                 else:
                     ans = s.recv(resp_nbytes)
+
+        elif self.type == 'dummy':
+            ans = None
+            print(command)
 
         return ans
 
