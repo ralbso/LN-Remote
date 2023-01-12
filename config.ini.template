@@ -1,0 +1,12 @@
+[GUI]
+DATA_PATH = 'C:/Path/to/data'
+ENVIRONMENT = 'live'
+DEBUG = False
+
+[MANIPULATOR]
+# Configured IP for manipulator 
+IP = '0.0.0.0'
+PORT = 1001
+# Serial number as read through COM PORT 
+SERIAL = ''
+DEBUG = False

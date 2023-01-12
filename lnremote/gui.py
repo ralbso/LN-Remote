@@ -8,6 +8,8 @@ Author: rmojica
 
 import sys
 import time
+import configparser
+import pathlib
 
 from PySide6 import QtGui, QtWidgets, QtCore
 from PySide6.QtCore import QObject, QRect, QSize, QThread, QRunnable, Signal, Slot
@@ -21,6 +23,12 @@ from manipulator import LuigsAndNeumannSM10
 
 class GUI(QMainWindow, LuigsAndNeumannSM10):
 
+    config_path = pathlib.Path(__file__).absolute().parent.parent / "config.ini"
+    CONFIG = configparser.ConfigParser()
+    CONFIG.read(config_path)
+    PATH = CONFIG['GUI']['DATA_PATH']
+    DEBUG = CONFIG['GUI'].getboolean('DEBUG')
+
     def __init__(self, connection_type):
         super().__init__()
 
@@ -29,20 +37,31 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.setMinimumSize(QSize(400, 300))
         self.setMinimumWidth(400)
         self.setFont(QFont('Helvetica', 14))
-        self._verbose = False
 
         self.initializeManipulator(connection_type=connection_type)
 
         self.createGrid()
 
         if connection_type == 'socket':
-            self.startThread()
+            self.positionThread()
         elif connection_type == 'dummy':
             self.updatePositions()
 
         self.approach_win = None
 
-    def startThread(self):
+    def positionThread(self):
+        self.thread = QThread()
+        self.worker = Worker(lambda: self.updatePositions())
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.deleteLater)
+        self.worker.answer.connect(self.worker.run)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+    
+    def moveAxesThread(self):
         self.thread = QThread()
         self.worker = Worker(lambda: self.updatePositions())
         self.worker.moveToThread(self.thread)
@@ -228,10 +247,17 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
     
     def moveAway(self):
         if float(self.read_x.text()) < 100.0:
-            self.errorDialog('The pipette might still be in the brain.\nAborting command.')
+            result = self.errorDialog('Looks like the pipette is still in the brain.\nAborting command.')
+            if result == 524288:
+                # first move stage X (1) all the way out
+                self.moveAxis(1, 0, 1)
+                time.sleep(1)
+                self.approachAxesPosition(axes=[2,3], approach_mode=0, positions=[500, 500], speed_mode=1)
+            else:
+                pass
+
         else:
-            # first move stage X (1) all the way out
-            self.moveAxis(1, 0, 1)
+            self.moveAxis(1, 1, 1)
             self.approachAxesPosition(axes=[2,3], approach_mode=0, positions=[500, 500], speed_mode=1)
 
     def updatePositions(self):
@@ -253,18 +279,25 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.approach_win.submitSpeed.connect(self.setPositioningVelocity)
         self.approach_win.show()
 
-    def errorDialog(self, errorMessage):
+    def errorDialog(self, error_message):
         """Generate error dialog to notify user of a problem
 
         Parameters
         ----------
-        errorMessage : str
+        error_message : str
             Error message to display on dialog box
         """
-        errorBox = QMessageBox.critical(self,
-                                        'Error',
-                                        errorMessage,
-                                        buttons=QMessageBox.Ok)
+        error_box = QMessageBox()
+        error_box.setIcon(QtWidgets.QMessageBox.Critical)
+        error_box.setWindowTitle('Error')
+        error_box.setText(error_message)
+        error_box.setStandardButtons(QMessageBox.Retry | QMessageBox.Cancel)
+        error_box.setDefaultButton(QMessageBox.Cancel)
+
+        proceed_btn = error_box.button(QMessageBox.Retry)
+        proceed_btn.setText('Proceed Anyway')
+
+        return error_box.exec()
 
 
 class ApproachWindow(QWidget):
