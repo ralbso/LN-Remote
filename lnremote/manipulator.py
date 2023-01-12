@@ -1092,7 +1092,7 @@ class LuigsAndNeumannSM10:
 
         pos = self.convertToFloatBytes(pos)
 
-        nbytes = 4 + len(axes) + len(positions)*4
+        nbytes = 1 + len(adr) + len(pos)
         group_flag = 0xA0
         data = ([group_flag] + adr + pos)
 
