@@ -8,6 +8,8 @@ Author: rmojica
 
 import sys
 import time
+import configparser
+import pathlib
 
 from PySide6 import QtGui, QtWidgets, QtCore
 from PySide6.QtCore import QObject, QRect, QSize, QThread, QRunnable, Signal, Slot
@@ -21,6 +23,12 @@ from manipulator import LuigsAndNeumannSM10
 
 class GUI(QMainWindow, LuigsAndNeumannSM10):
 
+    config_path = pathlib.Path(__file__).absolute().parent.parent / "config.ini"
+    CONFIG = configparser.ConfigParser()
+    CONFIG.read(config_path)
+    PATH = CONFIG['GUI']['DATA_PATH']
+    DEBUG = CONFIG['GUI'].getboolean('DEBUG')
+
     def __init__(self, connection_type):
         super().__init__()
 
@@ -29,7 +37,6 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         self.setMinimumSize(QSize(400, 300))
         self.setMinimumWidth(400)
         self.setFont(QFont('Helvetica', 14))
-        self._verbose = True
 
         self.initializeManipulator(connection_type=connection_type)
 
@@ -42,17 +49,17 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
         self.approach_win = None
 
-    # def positionThread(self):
-    #     self.thread = QThread()
-    #     self.worker = Worker(lambda: self.updatePositions())
-    #     self.worker.moveToThread(self.thread)
+    def positionThread(self):
+        self.thread = QThread()
+        self.worker = Worker(lambda: self.updatePositions())
+        self.worker.moveToThread(self.thread)
 
-    #     self.thread.started.connect(self.worker.run)
-    #     self.worker.finished.connect(self.thread.deleteLater)
-    #     self.worker.answer.connect(self.worker.run)
-    #     self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.deleteLater)
+        self.worker.answer.connect(self.worker.run)
+        self.thread.finished.connect(self.thread.deleteLater)
 
-    #     self.thread.start()
+        self.thread.start()
     
     def moveAxesThread(self):
         self.thread = QThread()
