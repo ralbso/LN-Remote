@@ -12,7 +12,7 @@ import configparser
 import pathlib
 
 from PySide6 import QtGui, QtWidgets, QtCore
-from PySide6.QtCore import QObject, QRect, QSize, QThread, QRunnable, Signal, Slot
+from PySide6.QtCore import QObject, QRect, QSize, QThread, QMutex, QRunnable, Signal, Slot, QWaitCondition
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog,
                              QGridLayout, QGroupBox, QLineEdit, QListView,
@@ -42,36 +42,23 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
 
         self.createGrid()
 
+        self.worker_wait_condition = QWaitCondition()
+
         if connection_type == 'socket':
-            self.positionThread()
-        elif connection_type == 'dummy':
-            self.updatePositions()
+            self.positionThread(self.worker_wait_condition)
+        # elif connection_type == 'dummy':
+        #     self.updatePositions()
 
         self.approach_win = None
 
-    def positionThread(self):
-        self.thread = QThread()
-        self.worker = Worker(lambda: self.updatePositions())
-        self.worker.moveToThread(self.thread)
-
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.thread.deleteLater)
-        self.worker.answer.connect(self.worker.run)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.thread.start()
-    
-    def moveAxesThread(self):
-        self.thread = QThread()
-        self.worker = Worker(lambda: self.updatePositions())
-        self.worker.moveToThread(self.thread)
-
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.thread.deleteLater)
-        self.worker.answer.connect(self.worker.run)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.thread.start()
+    def positionThread(self, wait_condition):
+        self.acquisition_worker = AcquisitionWorker(self.updatePositions, wait_condition)
+        self.acquisition_thread = QThread()
+        self.acquisition_worker.moveToThread(self.acquisition_thread)
+        self.acquisition_thread.started.connect(self.acquisition_worker.run)
+        self.acquisition_worker.finished.connect(self.acquisition_thread.quit)
+        self.acquisition_worker.data_ready.connect(self.updatePositions)
+        self.acquisition_thread.start()
 
     def createGrid(self):
         """Create grid that tiles the entire window
@@ -261,11 +248,13 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
             self.approachAxesPosition(axes=[2,3], approach_mode=0, positions=[500, 500], speed_mode=1)
 
     def updatePositions(self):
-        if self.type == 'socket':
-            positions = self.readManipulator([1,2,3])
+        # if self.type == 'socket':
+        #     positions = self.readManipulator([1,2,3])
 
-        elif self.type == 'dummy':
-            positions = [50, 317, 810]
+        # elif self.type == 'dummy':
+        #     positions = [50, 317, 810]
+
+        positions = self.acquisition_worker.positions
 
         if positions != b'' and positions is not None:
             self.read_x.setText(f'{positions[0]:.2f}')
@@ -345,13 +334,13 @@ class ApproachWindow(QWidget):
         speed_group = QButtonGroup(self.main_grid)
         speed_group.setExclusive(True)
         self.slow_speed = QRadioButton('Slow')
-        self.medium_speed = QRadioButton('Medium')
+        # self.medium_speed = QRadioButton('Medium')
         self.fast_speed = QRadioButton('Fast')
         speed_group.addButton(self.slow_speed)
-        speed_group.addButton(self.medium_speed)
+        # speed_group.addButton(self.medium_speed)
         speed_group.addButton(self.fast_speed)
         button_layout.addWidget(self.slow_speed)
-        button_layout.addWidget(self.medium_speed)
+        # button_layout.addWidget(self.medium_speed)
         button_layout.addWidget(self.fast_speed)
 
         self.go_btn = QPushButton('Go')
@@ -374,11 +363,11 @@ class ApproachWindow(QWidget):
     def getButtonClicked(self, button):
         speed = button.text().lower()
         if speed == 'slow':
-            velocity = 6    # 3 um/s 
-        elif speed == 'medium':
-            velocity = 7
+            velocity = 6    # 3 um/s, 0.002630 rps
         elif speed == 'fast':
-            velocity = 8
+            velocity = 7    # 6 um/s, 0.005070 rps
+        # elif speed == 'fast':
+        #     velocity = 8    # 12 um/s, 0.010200 rps
         self.submitSpeed.emit([1], 0, velocity)
 
 
@@ -393,9 +382,31 @@ class Worker(QObject):
 
     @Slot()
     def run(self):
-        # print('Slot getting position in thread:', QThread.currentThread())
         ans = self.function()
         self.answer.emit(ans)
+        self.finished.emit()
+
+
+class AcquisitionWorker(QObject):
+
+    finished = Signal()
+    data_ready = Signal()
+
+    def __init__(self, manipulator, wait_condition):
+        super().__init__()
+        self.wait_condition = wait_condition
+        self.manipulator = manipulator
+        self.mutex = QMutex()
+
+    def run(self):
+        while True:
+            self.mutex.lock()
+            self.wait_condition.wait(self.mutex)
+            self.mutex.unlock()
+
+            self.positions = self.manipulator.readManipulator([1,2,3])
+            self.data_ready.emit()
+
         self.finished.emit()
         
 
@@ -407,6 +418,6 @@ if __name__ == "__main__":
     #     pass
 
     app = QtWidgets.QApplication([])
-    mainWin = GUI(connection_type='dummy')
+    mainWin = GUI(connection_type='socket')
     mainWin.show()
     sys.exit(app.exec())
