@@ -1,12 +1,15 @@
 """"""
 """
-File: d:/GitHub/LN-Remote/gui.py
+File: d:/GitHub/LN-Remote/lnremote/gui.py
 
 Created on: 12/01/2022 14:17:02
 Author: rmojica
 """
 
 import time
+import numpy
+from pathlib import Path
+import datetime
 
 from config_loader import LoadConfig
 from manipulator import LuigsAndNeumannSM10
@@ -104,9 +107,10 @@ class PositionPanel(QGroupBox):
 
 class CellsPanel(QGroupBox):
 
-    def __init__(self, position_panel):
+    def __init__(self, position_panel, save_dir):
         super().__init__("Cells", parent=None)
         self.position_panel = position_panel
+        self.save_dir = save_dir
 
         layout = QGridLayout()
         self.setLayout(layout)
@@ -151,6 +155,44 @@ class CellsPanel(QGroupBox):
         current_position = self.position_panel.read_x.text()
         self.table.setItem(current_row - 1, 1,
                            QTableWidgetItem(current_position))
+
+    def getTableData(self):
+        self.pipettes = []
+        total_rows = self.table.rowCount()
+        total_columns = self.table.columnCount()
+        for row in range(total_rows):
+            self.pipettes.append([])
+            for column in range(total_columns):
+                _item = self.table.item(row, column)
+                if _item:
+                    self.pipettes[row].append(str(_item.text()))
+                else:
+                    self.pipettes[row].append('NA')
+
+    def saveTableData(self):
+        print('Saving pipettes...')
+        self.getTableData()
+        date = datetime.datetime.now().date().strftime("%Y%m%d")
+        save_dir = Path(f'{self.save_dir}/{date}')
+        save_dir.mkdir(parents=True, exist_ok=True)
+        filepath = Path(f'{save_dir}/pipettes.csv')
+        if not filepath.exists():
+            with open(filepath, 'ab') as f:
+                numpy.savetxt(f,
+                              self.pipettes,
+                              delimiter=",",
+                              comments="",
+                              header="pipette,depth",
+                              fmt='%s')
+
+        else:
+            with open(filepath, 'ab') as f:
+                f.write(b'\n')
+                numpy.savetxt(f,
+                              self.pipettes,
+                              delimiter=",",
+                              comments="",
+                              fmt='%s')
 
 
 class ControlsPanel(QGroupBox):
@@ -205,8 +247,8 @@ class ControlsPanel(QGroupBox):
             self.approach_win = ApproachWindow()
         self.approach_win.submitGoTo.connect(
             self.manipulator.approachAxesPosition)
-        self.approach_win.submitSpeed.connect(lambda:
-            self.manipulator.setPositioningVelocity())
+        self.approach_win.submitSpeed.connect(
+            self.manipulator.setPositioningVelocity)
         self.approach_win.show()
 
     def exitBrain(self):
@@ -374,7 +416,7 @@ class MainWindow(QMainWindow):
 
         self.interface = interface
         self.setupGui()
-        
+
     def setupGui(self):
         self.setWindowTitle('Manipulator GUI')
         self.setMinimumSize(QSize(400, 300))
@@ -383,8 +425,9 @@ class MainWindow(QMainWindow):
 
         self.manipulator = LuigsAndNeumannSM10()
         self.position_panel = PositionPanel(self.manipulator, self.interface)
-        self.cells_panel = CellsPanel(self.position_panel)
-        self.controls_panel = ControlsPanel(self.manipulator, self.position_panel)
+        self.cells_panel = CellsPanel(self.position_panel, self.PATH)
+        self.controls_panel = ControlsPanel(self.manipulator,
+                                            self.position_panel)
 
         self.content_layout = QGridLayout()
         self.content_layout.addWidget(self.position_panel, 0, 0)
