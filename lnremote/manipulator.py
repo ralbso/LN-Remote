@@ -6,17 +6,19 @@ Created on: 10/14/2022 14:56:24
 Author: rmojica
 """
 
-import time
-import numpy as np
 import binascii
-import ctypes
-import struct
 import configparser
+import ctypes
 import pathlib
-import threading
 import socket
+import struct
+import threading
+import time
+
+import numpy as np
 import serial
 import serial.tools.list_ports
+
 
 class LuigsAndNeumannSM10:
     """Represent Luigs and Neumann SM10 manipulator.\n
@@ -34,7 +36,7 @@ class LuigsAndNeumannSM10:
     CONFIG.read(config_path)
     VERBOSE = CONFIG['MANIPULATOR'].getboolean('DEBUG')
     IP = CONFIG['MANIPULATOR']['IP']
-    PORT = CONFIG['MANIPULATOR']['PORT']
+    PORT = int(CONFIG['MANIPULATOR']['PORT'])
     SERIAL = CONFIG['MANIPULATOR']['SERIAL']
 
     def __init__(self):
@@ -45,6 +47,8 @@ class LuigsAndNeumannSM10:
 
         self.cmd_lock = threading.Lock()
 
+        self.connection_type = 'socket'
+
     def __del__(self):
         try:
             self.manipulator.close()
@@ -54,19 +58,25 @@ class LuigsAndNeumannSM10:
             print('Connection to SM10 closed.')
 
     def initializeManipulator(self, connection_type='socket'):
-        self.type = connection_type
+        self.connection_type = connection_type
         # establish serial connection
         if connection_type == 'serial':
             self.device = self.findManipulator(self.SERIAL)
             self.manipulator = self.establishSerialConnection(self.device, self._timeout,
                                                               self.VERBOSE)
 
-        # elif connection_type == 'socket':
-        #     self.ip = '192.168.172.30'
-        #     self.port = 1001
+        elif connection_type == 'socket':
+            print('Testing ethernet connection...')
+            s = socket.socket()
+            try:
+                s.connect((self.IP, self.PORT))
+            except Exception as e:
+                print(f'Could not establish connection to IP {self.IP} and port {self.PORT}.\n{e}')
+            finally:
+                s.close()
 
         elif connection_type == 'dummy':
-            print('Initializing dummy manipulator.')
+            print('Initializing dummy manipulator...')
 
     @staticmethod
     def findManipulator(serial_number):
@@ -103,7 +113,7 @@ class LuigsAndNeumannSM10:
     def sendCommand(self, cmd_id, data_n_bytes, data, resp_nbytes=0):
 
         # calculate CRC for command parameters
-        (MSB, LSB) = self.calculateCRC(data, len(data))
+        (MSB, LSB) = self.crc16(data)
 
         if self.VERBOSE:
             print(data_n_bytes, len(data), data)
@@ -125,7 +135,7 @@ class LuigsAndNeumannSM10:
             print('Raw command:', self.bytes_command)
 
         # dealing with serial has proven to be quite limiting and challenging
-        if self.type == 'serial':
+        if self.connection_type == 'serial':
             if resp_nbytes == 0:
                 with self.cmd_lock:
                     self.manipulator.write(self.bytes_command)
@@ -172,7 +182,7 @@ class LuigsAndNeumannSM10:
                     e = f'Expected {binascii.hexlify(expected_response)}, but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
                     raise serial.SerialException(e)
 
-        elif self.type == 'socket':
+        elif self.connection_type == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.IP, self.PORT))
                 s.sendall(self.bytes_command)
@@ -181,7 +191,7 @@ class LuigsAndNeumannSM10:
                 else:
                     ans = s.recv(resp_nbytes)
 
-        elif self.type == 'dummy':
+        elif self.connection_type == 'dummy':
             ans = None
             print(command)
 
@@ -1115,7 +1125,7 @@ class LuigsAndNeumannSM10:
         # response: <ACK><ID1><ID2><14><axis1><axis2><axis3><axis4><flPOS1><flPOS2><flPOS3><flPOS4><MSB><LSB>
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
-        time.sleep(0.250)
+        time.sleep(0.1)
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
@@ -1172,27 +1182,42 @@ class LuigsAndNeumannSM10:
 
     # CRC Calculation
     @staticmethod
-    def calculateCRC(data_bytes, length):
+    def calculateCRC(data_bytes):
         crc_polynomial = 0x1021
         crc = 0
-        n = 0
 
         for idx, val in enumerate(data_bytes):
             if isinstance(val, bytes):
                 data_bytes[idx] = int.from_bytes(val, 'big')
 
-        while length > 0:
-            crc = crc ^ data_bytes[n] << 8
+        for byte in data_bytes:
+            crc = crc ^ byte << 8
             for i in np.arange(8):
                 if (crc & 0x8000):
                     crc = crc << 1 ^ crc_polynomial
                 else:
                     crc = crc << 1
 
-            length -= 1
-            n += 1
-
         crcMSB = ctypes.c_ubyte(crc >> 8)
         crcLSB = ctypes.c_ubyte(crc)
 
         return (crcMSB.value, crcLSB.value)
+
+    @staticmethod
+    def crc16(data_bytes: bytes):
+        '''
+        CRC-16 (CCITT) implemented with a precomputed lookup table
+        '''
+        polyn = 0x1021
+        
+        crc = 0xFFFF
+        for byte in data_bytes:
+            crc = (crc << 8) ^ polyn
+            crc &= 0xFFFF
+        
+        crcMSB = ctypes.c_ubyte(crc >> 8)
+        crcLSB = ctypes.c_ubyte(crc)
+
+        return (crcMSB.value, crcLSB.value)
+
+
