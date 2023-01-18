@@ -1,3 +1,11 @@
+""""""
+"""
+File: d:/GitHub/LN-Remote/lnremote/interface.py
+
+Created on: 01/17/2023 14:27:00
+Author: rmojica
+"""
+
 from config_loader import LoadConfig
 from gui import MainWindow
 from manipulator import LuigsAndNeumannSM10
@@ -18,7 +26,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog,
 class Interface:
 
     CONFIG = LoadConfig().Manipulator()
-    PATH = CONFIG['ip']
+    IP = CONFIG['ip']
     PORT = CONFIG['port']
     SERIAL = CONFIG['serial']
     DEBUG = CONFIG['debug']
@@ -38,7 +46,7 @@ class Interface:
         self.acquisition_worker.moveToThread(self.acquisition_thread)
         self.acquisition_thread.started.connect(self.acquisition_worker.run)
         self.acquisition_worker.finished.connect(self.acquisition_thread.quit)
-        self.acquisition_worker.data_ready.connect(self.data_ready_callback)
+        self.acquisition_worker.data_ready.connect(self.dataReadyCallback)
         self.acquisition_thread.start()
 
         self.gui.aboutToQuit.connect(self.onExit)
@@ -54,13 +62,14 @@ class Interface:
     def getCurrentPosition(self):
         self.worker_wait_condition.wakeOne()
 
-    def data_ready_callback(self):
+    def dataReadyCallback(self):
         self.main_window.position_panel.read_x.setText(f'{self.acquisition_worker.data[0]:.2f}')
         self.main_window.position_panel.read_y.setText(f'{self.acquisition_worker.data[1]:.2f}')
         self.main_window.position_panel.read_z.setText(f'{self.acquisition_worker.data[2]:.2f}')
         self.worker_wait_condition.wakeOne()
 
     def onExit(self):
+        self.main_window.cells_panel.saveTableData()
         print('Closing GUI...')
 
 class AcquisitionWorker(QObject):
