@@ -7,7 +7,6 @@ Author: rmojica
 """
 
 import binascii
-import configparser
 import ctypes
 import pathlib
 import socket
@@ -18,6 +17,8 @@ import time
 import numpy as np
 import serial
 import serial.tools.list_ports
+
+from config_loader import LoadConfig
 
 
 class LuigsAndNeumannSM10:
@@ -31,13 +32,12 @@ class LuigsAndNeumannSM10:
     SYN = '16'  # SYN character
     ACK = '06'  # ACK character
 
-    config_path = pathlib.Path(__file__).absolute().parent.parent / "config.ini"
-    CONFIG = configparser.ConfigParser()
-    CONFIG.read(config_path)
-    VERBOSE = CONFIG['MANIPULATOR'].getboolean('DEBUG')
-    IP = CONFIG['MANIPULATOR']['IP']
-    PORT = int(CONFIG['MANIPULATOR']['PORT'])
-    SERIAL = CONFIG['MANIPULATOR']['SERIAL']
+    CONFIG = LoadConfig().Manipulator()
+    VERBOSE = CONFIG['debug'] == 'True'
+    IP = CONFIG['ip']
+    PORT = int(CONFIG['port'])
+    SERIAL = CONFIG['serial']
+    CONNECTION = CONFIG['connection']
 
     def __init__(self):
         super().__init__()
@@ -195,6 +195,9 @@ class LuigsAndNeumannSM10:
             ans = None
             print(command)
 
+        if self.VERBOSE:
+            print(ans)
+
         return ans
 
     # COMMANDS
@@ -312,7 +315,7 @@ class LuigsAndNeumannSM10:
         speed_mode : str
             Desired speed mode for movement, fast (1) or slow (0)
         direction : int
-            Direction of movement.
+            Direction of movement, positive (1) or negative (-1).
         velocity : int
             Velocity stage for desired speed mode. Must be greater than 0 and smaller than 15.
         """
@@ -1125,7 +1128,7 @@ class LuigsAndNeumannSM10:
         # response: <ACK><ID1><ID2><14><axis1><axis2><axis3><axis4><flPOS1><flPOS2><flPOS3><flPOS4><MSB><LSB>
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
-        time.sleep(0.1)
+
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
