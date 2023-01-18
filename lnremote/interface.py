@@ -10,6 +10,7 @@ from config_loader import LoadConfig
 from gui import MainWindow
 from manipulator import LuigsAndNeumannSM10
 
+import time
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import (QMutex, QObject, QRect, QRunnable, QSize, QThread,
                             QWaitCondition, Signal, Slot)
@@ -29,7 +30,7 @@ class Interface:
     IP = CONFIG['ip']
     PORT = CONFIG['port']
     SERIAL = CONFIG['serial']
-    DEBUG = CONFIG['debug']
+    DEBUG = CONFIG['debug'] == 'True'
     CONNECTION = CONFIG['connection']
 
     def __init__(self):
@@ -90,6 +91,7 @@ class AcquisitionWorker(QObject):
             self.wait_condition.wait(self.mutex)
             self.mutex.unlock()
 
+            time.sleep(0.25)
             self.data = self.manipulator.readManipulator([1, 2, 3])
             self.data_ready.emit()
 
