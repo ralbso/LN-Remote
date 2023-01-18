@@ -1,3 +1,10 @@
+""""""
+"""
+File: d:/GitHub/LN-Remote/lnremote/config_loader.py
+
+Created on: 01/17/2023 14:31:51
+Author: rmojica
+"""
 import pathlib
 import configparser
 
