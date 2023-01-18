@@ -1,3 +1,4 @@
 /ln-remote/
 *.pyc
 config.ini
+.vscode/settings.json
