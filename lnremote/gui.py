@@ -6,159 +6,121 @@ Created on: 12/01/2022 14:17:02
 Author: rmojica
 """
 
-import sys
 import time
-import configparser
-import pathlib
 
-from PySide6 import QtGui, QtWidgets, QtCore
-from PySide6.QtCore import QObject, QRect, QSize, QThread, QMutex, QRunnable, Signal, Slot, QWaitCondition
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog,
-                             QGridLayout, QGroupBox, QLineEdit, QListView,
-                             QListWidget, QMainWindow, QMessageBox,
-                             QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFormLayout,
-                             QRadioButton, QButtonGroup, QTableWidget, QTableWidgetItem)
+from config_loader import LoadConfig
 from manipulator import LuigsAndNeumannSM10
 
-class GUI(QMainWindow, LuigsAndNeumannSM10):
+from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtCore import QSize, Signal, Slot
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog,
+                               QFileDialog, QGridLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit, QListView,
+                               QListWidget, QMainWindow, QMessageBox,
+                               QPushButton, QRadioButton, QTableWidget,
+                               QTableWidgetItem, QVBoxLayout, QWidget)
 
-    config_path = pathlib.Path(__file__).absolute().parent.parent / "config.ini"
-    CONFIG = configparser.ConfigParser()
-    CONFIG.read(config_path)
-    PATH = CONFIG['GUI']['DATA_PATH']
-    DEBUG = CONFIG['GUI'].getboolean('DEBUG')
 
-    def __init__(self, connection_type):
-        super().__init__()
+class PositionPanel(QGroupBox):
 
-        # set up GUI
-        self.setWindowTitle("Manipulator GUI")
-        self.setMinimumSize(QSize(400, 300))
-        self.setMinimumWidth(400)
-        self.setFont(QFont('Helvetica', 14))
+    def __init__(self, manipulator, interface):
+        super().__init__("Position", parent=None)
+        self.manipulator = manipulator
+        self.interface = interface
 
-        self.initializeManipulator(connection_type=connection_type)
+        # self.interface.getCurrentPosition()
 
-        self.createGrid()
+        layout = QGridLayout()
+        self.setLayout(layout)
 
-        self.worker_wait_condition = QWaitCondition()
+        self.createPositionBoxes()
+        self.createResetAxesButton()
 
-        if connection_type == 'socket':
-            self.positionThread(self.worker_wait_condition)
-        # elif connection_type == 'dummy':
-        #     self.updatePositions()
+        layout.addWidget(self.createAxisLabel('X'), 0, 0)
+        layout.addWidget(self.createAxisLabel('Y'), 1, 0)
+        layout.addWidget(self.createAxisLabel('Z'), 2, 0)
 
-        self.approach_win = None
+        layout.addWidget(self.read_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.read_y, 1, 1, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.read_z, 2, 1, alignment=QtCore.Qt.AlignLeft)
 
-    def positionThread(self, wait_condition):
-        self.acquisition_worker = AcquisitionWorker(self.updatePositions, wait_condition)
-        self.acquisition_thread = QThread()
-        self.acquisition_worker.moveToThread(self.acquisition_thread)
-        self.acquisition_thread.started.connect(self.acquisition_worker.run)
-        self.acquisition_worker.finished.connect(self.acquisition_thread.quit)
-        self.acquisition_worker.data_ready.connect(self.updatePositions)
-        self.acquisition_thread.start()
+        layout.addWidget(self.createUnitLabel(),
+                         0,
+                         2,
+                         alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(),
+                         1,
+                         2,
+                         alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(),
+                         2,
+                         2,
+                         alignment=QtCore.Qt.AlignLeft)
 
-    def createGrid(self):
-        """Create grid that tiles the entire window
-        """
-        # create central panel that spans the whole window
-        panel = QWidget(self)
-        self.setCentralWidget(panel)
+        layout.addWidget(self.zero_btn, 3, 1)
 
-        # lay grid on panel
-        self.main_grid = QGridLayout()
-        panel.setLayout(self.main_grid)
-
-        # create panels for GUI
-        self.createPositionPanel()
-        self.createControlsPanel()
-        self.createCellsPanel()
-
-    def createPositionPanel(self):
-        position_panel_box = QGroupBox('Position')
-        self.main_grid.addWidget(position_panel_box, 0, 0)
-
-        subgrid = QGridLayout()
-        position_panel_box.setLayout(subgrid)
-
-        # X POSITION LABEL
-        micron_label = QLabel('um')
-        micron_label.setFont(QFont('Helvetica', 14))
-        micron_label.setStyleSheet('padding:2px')
-
-        axis_label = QLabel('X')
-        axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:5px')
-        subgrid.addWidget(axis_label, 0, 0)
-
+    def createPositionBoxes(self):
         self.read_x = QLineEdit('')
         self.read_x.setStyleSheet('padding:20px')
         self.read_x.setToolTip('Position of X Axis')
         self.read_x.setFont(QFont('Helvetica', 14))
         self.read_x.setReadOnly(True)
         self.read_x.setMaximumWidth(150)
-        subgrid.addWidget(self.read_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
-        subgrid.addWidget(micron_label, 0, 2, alignment=QtCore.Qt.AlignLeft)
-
-        # Y POSITION LABEL
-        micron_label = QLabel('um')
-        micron_label.setFont(QFont('Helvetica', 14))
-        micron_label.setStyleSheet('padding:2px')
-        
-        axis_label = QLabel('Y')
-        axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:5px')
-        subgrid.addWidget(axis_label, 1, 0)
 
         self.read_y = QLineEdit('')
         self.read_y.setStyleSheet('padding:20px')
-        self.read_y.setToolTip('Position of Y Axis')
+        self.read_y.setToolTip('Position of X Axis')
         self.read_y.setFont(QFont('Helvetica', 14))
         self.read_y.setReadOnly(True)
         self.read_y.setMaximumWidth(150)
-        subgrid.addWidget(self.read_y, 1, 1, alignment=QtCore.Qt.AlignLeft)
-        subgrid.addWidget(micron_label, 1, 2, alignment=QtCore.Qt.AlignLeft)
-
-        # Z POSITION LABEL
-        micron_label = QLabel('um')
-        micron_label.setFont(QFont('Helvetica', 14))
-        micron_label.setStyleSheet('padding:2px')
-
-        axis_label = QLabel('Z')
-        axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:5px')
-        subgrid.addWidget(axis_label, 2, 0)
 
         self.read_z = QLineEdit('')
         self.read_z.setStyleSheet('padding:20px')
-        self.read_z.setToolTip('Position of Z Axis')
+        self.read_z.setToolTip('Position of X Axis')
         self.read_z.setFont(QFont('Helvetica', 14))
         self.read_z.setReadOnly(True)
         self.read_z.setMaximumWidth(150)
-        subgrid.addWidget(self.read_z, 2, 1, alignment=QtCore.Qt.AlignLeft)
-        subgrid.addWidget(micron_label, 2, 2, alignment=QtCore.Qt.AlignLeft)
 
-        # ZERO AXES BUTTON
+    def createResetAxesButton(self):
         self.zero_btn = QPushButton('Zero Axes')
         self.zero_btn.setStyleSheet('padding:20px')
-        self.zero_btn.setToolTip('Zero all axes')        
-        subgrid.addWidget(self.zero_btn, 3, 1)
-        self.zero_btn.clicked.connect(lambda: self.resetAxesZero([1, 2, 3]))
+        self.zero_btn.setToolTip('Zero all axes')
+        self.zero_btn.clicked.connect(
+            lambda: self.manipulator.resetAxesZero([1, 2, 3]))
 
-    def createCellsPanel(self):
-        cells_panel_box = QGroupBox('Cells')
-        self.main_grid.addWidget(cells_panel_box, 0, 1)
+    def createUnitLabel(self):
+        micron_label = QLabel('um')
+        micron_label.setFont(QFont('Helvetica', 14))
+        micron_label.setStyleSheet('padding:2px')
+        return micron_label
 
-        # lay boxes on panel
-        grid_layout = QGridLayout()
-        cells_panel_box.setLayout(grid_layout)
+    def createAxisLabel(self, axis: str):
+        axis_label = QLabel(axis)
+        axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
+        axis_label.setStyleSheet('padding:5px')
+        return axis_label
 
-        # create table
+
+class CellsPanel(QGroupBox):
+
+    def __init__(self, position_panel):
+        super().__init__("Cells", parent=None)
+        self.position_panel = position_panel
+
+        layout = QGridLayout()
+        self.setLayout(layout)
+
+        self.createTable()
+        self.createAddPipetteButton()
+        self.createSavePositionButton()
+
+        layout.addWidget(self.table, 0, 0, 1, 0)
+        layout.addWidget(self.add_pipette_btn, 1, 0)
+        layout.addWidget(self.save_position_btn, 1, 1)
+
+    def createTable(self):
         self.table = QTableWidget()
-        grid_layout.addWidget(self.table, 0, 0, 1, 0)
-
         self.table.setFont(QFont('Helvetica', 10))
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(['Pipette', 'Depth'])
@@ -168,105 +130,113 @@ class GUI(QMainWindow, LuigsAndNeumannSM10):
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
 
-        # ADD PIPETTE BUTTON
+    def createAddPipetteButton(self):
         self.add_pipette_btn = QPushButton('Add')
         self.add_pipette_btn.setStyleSheet('padding:20px')
-        self.add_pipette_btn.setToolTip('Add row to table')        
-        grid_layout.addWidget(self.add_pipette_btn, 1, 0)
+        self.add_pipette_btn.setToolTip('Add row to table')
         self.add_pipette_btn.clicked.connect(self.addRow)
 
-        # SAVE POSITION BUTTON
+    def createSavePositionButton(self):
         self.save_position_btn = QPushButton('Save Position')
         self.save_position_btn.setStyleSheet('padding:20px')
-        self.save_position_btn.setToolTip('Save current position')        
-        grid_layout.addWidget(self.save_position_btn, 1, 1)
+        self.save_position_btn.setToolTip('Save current position')
         self.save_position_btn.clicked.connect(self.addPatchedCell)
 
     def addRow(self):
-        rows = self.table.rowCount()
-        self.table.insertRow(rows)
+        total_rows = self.table.rowCount()
+        self.table.insertRow(total_rows)
 
     def addPatchedCell(self):
-        current_table_row = self.table.rowCount()
-        current_position = self.read_x.text()
-        self.table.setItem(current_table_row-1, 1, QTableWidgetItem(current_position))
+        current_row = self.table.rowCount()
+        current_position = self.position_panel.read_x.text()
+        self.table.setItem(current_row - 1, 1,
+                           QTableWidgetItem(current_position))
 
-    def createControlsPanel(self):
-        controls_panel_box = QGroupBox('Controls')
-        self.main_grid.addWidget(controls_panel_box, 1, 0, 1, 2)
 
-        # lay boxes on panel
-        subgrid = QGridLayout()
-        controls_panel_box.setLayout(subgrid)
+class ControlsPanel(QGroupBox):
 
-        # STOP ALL AXES BUTTON
-        self.stop_movement_x_btn = QPushButton('STOP')
-        self.stop_movement_x_btn.setStyleSheet('padding:20px')
-        self.stop_movement_x_btn.setToolTip('Immediately stop movement in X axis')
-        subgrid.addWidget(self.stop_movement_x_btn, 0, 0)
+    def __init__(self, manipulator, position_panel):
+        super().__init__('Controls')
 
-        # GO TO POSITION BUTTON
-        self.goto_btn = QPushButton('Approach')
-        self.goto_btn.setStyleSheet('padding:20px')
-        self.goto_btn.setToolTip('Go to absolute coordinates')
-        subgrid.addWidget(self.goto_btn, 0, 1)
+        self.manipulator = manipulator
+        self.position_panel = position_panel
+        self.approach_win = None
 
-        # EXIT BRAIN BUTTON
+        layout = QGridLayout()
+        self.setLayout(layout)
+
+        self.createStopButton()
+        self.createApproachButton()
+        self.createExitBrainButton()
+        self.createMoveAwayButton()
+
+        layout.addWidget(self.stop_axes_btn, 0, 0)
+        layout.addWidget(self.approach_btn, 0, 1)
+        layout.addWidget(self.exit_brain_btn, 1, 0)
+        layout.addWidget(self.move_away_btn, 1, 1)
+
+    def createStopButton(self):
+        self.stop_axes_btn = QPushButton('STOP')
+        self.stop_axes_btn.setStyleSheet('padding:20px')
+        self.stop_axes_btn.setToolTip('Immediately stop movement')
+        self.stop_axes_btn.clicked.connect(
+            lambda: self.manipulator.stopAxes([1, 2, 3]))
+
+    def createApproachButton(self):
+        self.approach_btn = QPushButton('Approach')
+        self.approach_btn.setStyleSheet('padding:20px')
+        self.approach_btn.setToolTip('Go to absolute coordinates')
+        self.approach_btn.clicked.connect(self.approachPositionDialog)
+
+    def createExitBrainButton(self):
         self.exit_brain_btn = QPushButton('Exit Tissue')
         self.exit_brain_btn.setStyleSheet('padding:20px')
         self.exit_brain_btn.setToolTip('Slowly exit tissue to 100 um')
-        subgrid.addWidget(self.exit_brain_btn, 1, 0)
+        self.exit_brain_btn.clicked.connect(self.exitBrain)
 
-        # MOVE AWAY BUTTON
+    def createMoveAwayButton(self):
         self.move_away_btn = QPushButton('Move Away')
         self.move_away_btn.setStyleSheet('padding:20px')
         self.move_away_btn.setToolTip('Move stages away from the sample')
-        subgrid.addWidget(self.move_away_btn, 1, 1)
-
-        # BUTTON CONNECTIONS
-        self.stop_movement_x_btn.clicked.connect(lambda: self.stopAxes([1, 2, 3]))
-        self.goto_btn.clicked.connect(self.approachPositionDialog)
-        self.exit_brain_btn.clicked.connect(self.exitBrain)
         self.move_away_btn.clicked.connect(self.moveAway)
-
-    def exitBrain(self):
-        self.approachAxesPosition(axes=[1], approach_mode=0, positions=[100], speed_mode=0)
-    
-    def moveAway(self):
-        if float(self.read_x.text()) < 100.0:
-            result = self.errorDialog('Looks like the pipette is still in the brain.\nAborting command.')
-            if result == 524288:
-                # first move stage X (1) all the way out
-                self.moveAxis(1, 0, 1)
-                time.sleep(1)
-                self.approachAxesPosition(axes=[2,3], approach_mode=0, positions=[500, 500], speed_mode=1)
-            else:
-                pass
-
-        else:
-            self.moveAxis(1, 1, 1)
-            self.approachAxesPosition(axes=[2,3], approach_mode=0, positions=[500, 500], speed_mode=1)
-
-    def updatePositions(self):
-        # if self.type == 'socket':
-        #     positions = self.readManipulator([1,2,3])
-
-        # elif self.type == 'dummy':
-        #     positions = [50, 317, 810]
-
-        positions = self.acquisition_worker.positions
-
-        if positions != b'' and positions is not None:
-            self.read_x.setText(f'{positions[0]:.2f}')
-            self.read_y.setText(f'{positions[1]:.2f}')
-            self.read_z.setText(f'{positions[2]:.2f}')
 
     def approachPositionDialog(self):
         if self.approach_win is None:
             self.approach_win = ApproachWindow()
-        self.approach_win.submitGoTo.connect(self.approachAxesPosition)
-        self.approach_win.submitSpeed.connect(self.setPositioningVelocity)
+        self.approach_win.submitGoTo.connect(
+            self.manipulator.approachAxesPosition)
+        self.approach_win.submitSpeed.connect(lambda:
+            self.manipulator.setPositioningVelocity())
         self.approach_win.show()
+
+    def exitBrain(self):
+        self.manipulator.approachAxesPosition(axes=[1],
+                                              approach_mode=0,
+                                              positions=[100],
+                                              speed_mode=0)
+
+    def moveAway(self):
+        if float(self.position_panel.read_x.text()) < 100.0:
+            result = self.errorDialog(
+                'Looks like the pipette is still in the brain.\nAborting command.'
+            )
+            if result == 524288:
+                # first move stage X (1) all the way out
+                self.manipulator.moveAxis(1, 0, 1)
+                time.sleep(1)
+                self.manipulator.approachAxesPosition(axes=[2, 3],
+                                                      approach_mode=0,
+                                                      positions=[500, 500],
+                                                      speed_mode=1)
+            else:
+                pass
+
+        else:
+            self.manipulator.moveAxis(1, 1, 1)
+            self.maniuplator.approachAxesPosition(axes=[2, 3],
+                                                  approach_mode=0,
+                                                  positions=[500, 500],
+                                                  speed_mode=1)
 
     def errorDialog(self, error_message):
         """Generate error dialog to notify user of a problem
@@ -295,129 +265,131 @@ class ApproachWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.createGrid()
-        self.populateGrid()
 
-    def createGrid(self):
-        # lay grid on panel
-        self.main_grid = QGridLayout()
-        self.setLayout(self.main_grid)
+        layout = QGridLayout()
+        self.setLayout(layout)
+        self.speed_group = QButtonGroup(layout)
 
-    def populateGrid(self):
-        micron_label = QLabel('um')
-        micron_label.setFont(QFont('Helvetica', 14))
-        micron_label.setStyleSheet('padding:2px')
+        self.createPositionBox()
+        self.createRadioButtons()
+        self.createRadioBox()
+        self.createGoButton()
 
-        axis_label = QLabel('X')
-        axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:20px')
-        self.main_grid.addWidget(axis_label, 0, 0)
+        layout.addWidget(self.createAxisLabel('X'), 0, 0)
+        layout.addWidget(self.goto_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(),
+                         0,
+                         2,
+                         alignment=QtCore.Qt.AlignLeft)
 
+        layout.addWidget(self.speed_selection_group, 1, 1)
+        layout.addWidget(self.go_btn, 2, 1)
+
+    def createPositionBox(self):
         self.goto_x = QLineEdit('')
         self.goto_x.setStyleSheet('padding:20px')
         self.goto_x.setFont(QFont('Helvetica', 16))
         self.goto_x.setToolTip('Position of X Axis')
         self.goto_x.setMaximumWidth(150)
-        self.main_grid.addWidget(self.goto_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
-        self.main_grid.addWidget(micron_label, 0, 2, alignment=QtCore.Qt.AlignLeft)
 
-        micron_label = QLabel('um')
-        micron_label.setFont(QFont('Helvetica', 14))
-        micron_label.setStyleSheet('padding:2px')
+    def createRadioBox(self):
+        self.speed_selection_group = QGroupBox('Speed')
+        self.button_layout = QHBoxLayout()
+        self.speed_selection_group.setLayout(self.button_layout)
 
-        speed_selection_group = QGroupBox('Speed')
-        self.main_grid.addWidget(speed_selection_group, 1, 1)
+        self.speed_group.setExclusive(True)
 
-        button_layout = QHBoxLayout()
-        speed_selection_group.setLayout(button_layout)
+        self.speed_group.addButton(self.slow_speed_btn)
+        self.speed_group.addButton(self.fast_speed_btn)
 
-        speed_group = QButtonGroup(self.main_grid)
-        speed_group.setExclusive(True)
-        self.slow_speed = QRadioButton('Slow')
-        # self.medium_speed = QRadioButton('Medium')
-        self.fast_speed = QRadioButton('Fast')
-        speed_group.addButton(self.slow_speed)
-        # speed_group.addButton(self.medium_speed)
-        speed_group.addButton(self.fast_speed)
-        button_layout.addWidget(self.slow_speed)
-        # button_layout.addWidget(self.medium_speed)
-        button_layout.addWidget(self.fast_speed)
+        self.button_layout.addWidget(self.slow_speed_btn)
+        self.button_layout.addWidget(self.fast_speed_btn)
 
+    def createRadioButtons(self):
+        # set default speed
+        self.speed = 'slow'
+        self.setToggledSpeed()
+
+        self.slow_speed_btn = QRadioButton('Slow')
+        self.slow_speed_btn.speed = 'slow'
+        self.slow_speed_btn.setChecked(True)
+        self.slow_speed_btn.toggled.connect(self.getToggledButton)
+
+        self.fast_speed_btn = QRadioButton('Fast')
+        self.fast_speed_btn.speed = 'fast'
+        self.fast_speed_btn.setChecked(False)
+        self.fast_speed_btn.toggled.connect(self.getToggledButton)
+
+    def createGoButton(self):
         self.go_btn = QPushButton('Go')
         self.go_btn.setStyleSheet('padding:20px')
         self.go_btn.setToolTip('Go to absolute position')
         self.go_btn.setMaximumWidth(150)
-        self.main_grid.addWidget(self.go_btn, 2, 1)
-
         self.go_btn.clicked.connect(self.getInputPosition)
-        speed_group.buttonClicked.connect(self.getButtonClicked)
 
+    def createUnitLabel(self):
+        micron_label = QLabel('um')
+        micron_label.setFont(QFont('Helvetica', 14))
+        micron_label.setStyleSheet('padding:2px')
+        return micron_label
+
+    def createAxisLabel(self, axis: str):
+        axis_label = QLabel(axis)
+        axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
+        axis_label.setStyleSheet('padding:5px')
+        return axis_label
+
+    @Slot(list, float, list, int)
     def getInputPosition(self):
         try:
             xcoord = float(self.goto_x.text())
             self.submitGoTo.emit([1], 0, [xcoord], 0)
         except ValueError:
-            pass        
+            pass
         self.close()
 
-    def getButtonClicked(self, button):
-        speed = button.text().lower()
-        if speed == 'slow':
-            velocity = 6    # 3 um/s, 0.002630 rps
-        elif speed == 'fast':
-            velocity = 7    # 6 um/s, 0.005070 rps
-        # elif speed == 'fast':
-        #     velocity = 8    # 12 um/s, 0.010200 rps
+    def getToggledButton(self):
+        toggled_radio = self.sender()
+        self.speed = toggled_radio.speed
+        self.setToggledSpeed()
+
+    @Slot(list, int, int)
+    def setToggledSpeed(self):
+        if self.speed == 'slow':
+            velocity = 6  # 3 um/s, 0.002630 rps
+        elif self.speed == 'fast':
+            velocity = 7  # 6 um/s, 0.005070 rps
+
         self.submitSpeed.emit([1], 0, velocity)
 
 
-class Worker(QObject):
+class MainWindow(QMainWindow):
 
-    finished = Signal()
-    answer = Signal(str)
+    CONFIG = LoadConfig().Gui()
+    PATH = CONFIG['data_path']
+    DEBUG = CONFIG['debug']
 
-    def __init__(self, function):
+    def __init__(self, interface):
         super().__init__()
-        self.function = function
 
-    @Slot()
-    def run(self):
-        ans = self.function()
-        self.answer.emit(ans)
-        self.finished.emit()
-
-
-class AcquisitionWorker(QObject):
-
-    finished = Signal()
-    data_ready = Signal()
-
-    def __init__(self, manipulator, wait_condition):
-        super().__init__()
-        self.wait_condition = wait_condition
-        self.manipulator = manipulator
-        self.mutex = QMutex()
-
-    def run(self):
-        while True:
-            self.mutex.lock()
-            self.wait_condition.wait(self.mutex)
-            self.mutex.unlock()
-
-            self.positions = self.manipulator.readManipulator([1,2,3])
-            self.data_ready.emit()
-
-        self.finished.emit()
+        self.interface = interface
+        self.setupGui()
         
+    def setupGui(self):
+        self.setWindowTitle('Manipulator GUI')
+        self.setMinimumSize(QSize(400, 300))
+        self.setMinimumWidth(400)
+        self.setFont(QFont('Helvetica', 14))
 
-if __name__ == "__main__":
-    # try:
-    #     from ctypes import windll
-    #     windll.shcore.SetProcessDpiAwareness(0)
-    # except ImportError:
-    #     pass
+        self.manipulator = LuigsAndNeumannSM10()
+        self.position_panel = PositionPanel(self.manipulator, self.interface)
+        self.cells_panel = CellsPanel(self.position_panel)
+        self.controls_panel = ControlsPanel(self.manipulator, self.position_panel)
 
-    app = QtWidgets.QApplication([])
-    mainWin = GUI(connection_type='socket')
-    mainWin.show()
-    sys.exit(app.exec())
+        self.content_layout = QGridLayout()
+        self.content_layout.addWidget(self.position_panel, 0, 0)
+        self.content_layout.addWidget(self.cells_panel, 0, 1)
+        self.content_layout.addWidget(self.controls_panel, 1, 0, 1, 2)
+
+        self.setCentralWidget(QWidget())
+        self.centralWidget().setLayout(self.content_layout)
