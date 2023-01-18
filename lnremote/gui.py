@@ -13,16 +13,17 @@ import datetime
 
 from config_loader import LoadConfig
 from manipulator import LuigsAndNeumannSM10
+from __init__ import __about__
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSize, Signal, Slot
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog,
-                               QFileDialog, QGridLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QLineEdit, QListView,
-                               QListWidget, QMainWindow, QMessageBox,
+from PySide6.QtGui import QFont, QAction
+from PySide6.QtWidgets import (QMenuBar, QMenu, QButtonGroup,
+                               QGridLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit,
+                               QMainWindow, QMessageBox,
                                QPushButton, QRadioButton, QTableWidget,
-                               QTableWidgetItem, QVBoxLayout, QWidget)
+                               QTableWidgetItem, QWidget)
 
 
 class PositionPanel(QGroupBox):
@@ -32,12 +33,11 @@ class PositionPanel(QGroupBox):
         self.manipulator = manipulator
         self.interface = interface
 
-        # self.interface.getCurrentPosition()
-
         layout = QGridLayout()
         self.setLayout(layout)
 
         self.createPositionBoxes()
+        self.createStopButton()
         self.createResetAxesButton()
 
         layout.addWidget(self.createAxisLabel('X'), 0, 0)
@@ -48,20 +48,12 @@ class PositionPanel(QGroupBox):
         layout.addWidget(self.read_y, 1, 1, alignment=QtCore.Qt.AlignLeft)
         layout.addWidget(self.read_z, 2, 1, alignment=QtCore.Qt.AlignLeft)
 
-        layout.addWidget(self.createUnitLabel(),
-                         0,
-                         2,
-                         alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(),
-                         1,
-                         2,
-                         alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(),
-                         2,
-                         2,
-                         alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 0, 2, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 1, 2, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 2, 2, alignment=QtCore.Qt.AlignLeft)
 
-        layout.addWidget(self.zero_btn, 3, 1)
+        layout.addWidget(self.stop_axes_btn, 3, 0, 1, 2)
+        layout.addWidget(self.zero_btn, 3, 2)
 
     def createPositionBoxes(self):
         self.read_x = QLineEdit('')
@@ -73,17 +65,24 @@ class PositionPanel(QGroupBox):
 
         self.read_y = QLineEdit('')
         self.read_y.setStyleSheet('padding:20px')
-        self.read_y.setToolTip('Position of X Axis')
+        self.read_y.setToolTip('Position of Y Axis')
         self.read_y.setFont(QFont('Helvetica', 14))
         self.read_y.setReadOnly(True)
         self.read_y.setMaximumWidth(150)
 
         self.read_z = QLineEdit('')
         self.read_z.setStyleSheet('padding:20px')
-        self.read_z.setToolTip('Position of X Axis')
+        self.read_z.setToolTip('Position of Z Axis')
         self.read_z.setFont(QFont('Helvetica', 14))
         self.read_z.setReadOnly(True)
         self.read_z.setMaximumWidth(150)
+    
+    def createStopButton(self):
+        self.stop_axes_btn = QPushButton('STOP')
+        self.stop_axes_btn.setStyleSheet('padding:20px')
+        self.stop_axes_btn.setToolTip('Immediately stop movement')
+        self.stop_axes_btn.clicked.connect(
+            lambda: self.manipulator.stopAxes([1, 2, 3]))
 
     def createResetAxesButton(self):
         self.zero_btn = QPushButton('Zero Axes')
@@ -187,7 +186,6 @@ class CellsPanel(QGroupBox):
 
         else:
             with open(filepath, 'ab') as f:
-                f.write(b'\n')
                 numpy.savetxt(f,
                               self.pipettes,
                               delimiter=",",
@@ -207,22 +205,15 @@ class ControlsPanel(QGroupBox):
         layout = QGridLayout()
         self.setLayout(layout)
 
-        self.createStopButton()
         self.createApproachButton()
         self.createExitBrainButton()
         self.createMoveAwayButton()
+        self.createReturnButton()
 
-        layout.addWidget(self.stop_axes_btn, 0, 0)
-        layout.addWidget(self.approach_btn, 0, 1)
-        layout.addWidget(self.exit_brain_btn, 1, 0)
-        layout.addWidget(self.move_away_btn, 1, 1)
-
-    def createStopButton(self):
-        self.stop_axes_btn = QPushButton('STOP')
-        self.stop_axes_btn.setStyleSheet('padding:20px')
-        self.stop_axes_btn.setToolTip('Immediately stop movement')
-        self.stop_axes_btn.clicked.connect(
-            lambda: self.manipulator.stopAxes([1, 2, 3]))
+        layout.addWidget(self.approach_btn, 0, 0)
+        layout.addWidget(self.exit_brain_btn, 0, 1)
+        layout.addWidget(self.move_away_btn, 1, 0)
+        layout.addWidget(self.return_btn, 1, 1)
 
     def createApproachButton(self):
         self.approach_btn = QPushButton('Approach')
@@ -242,6 +233,12 @@ class ControlsPanel(QGroupBox):
         self.move_away_btn.setToolTip('Move stages away from the sample')
         self.move_away_btn.clicked.connect(self.moveAway)
 
+    def createReturnButton(self):
+        self.return_btn = QPushButton('Return')
+        self.return_btn.setStyleSheet('padding:20px')
+        self.return_btn.setToolTip('Return pipette to the craniotomy')
+        self.return_btn.clicked.connect(self.returnToCraniotomy)
+
     def approachPositionDialog(self):
         if self.approach_win is None:
             self.approach_win = ApproachWindow()
@@ -258,13 +255,12 @@ class ControlsPanel(QGroupBox):
                                               speed_mode=0)
 
     def moveAway(self):
-        if float(self.position_panel.read_x.text()) < 100.0:
-            result = self.errorDialog(
-                'Looks like the pipette is still in the brain.\nAborting command.'
-            )
+        if self.inBrain():
+            msg = 'Looks like the pipette is still in the brain.\nAborting command.'
+            result = self.errorDialog(msg, kind='choice')
             if result == 524288:
-                # first move stage X (1) all the way out
-                self.manipulator.moveAxis(1, 0, 1)
+                # first exit brain
+                self.exitBrain()
                 time.sleep(1)
                 self.manipulator.approachAxesPosition(axes=[2, 3],
                                                       approach_mode=0,
@@ -274,13 +270,30 @@ class ControlsPanel(QGroupBox):
                 pass
 
         else:
-            self.manipulator.moveAxis(1, 1, 1)
+            self.manipulator.moveAxis(axis=1, speed_mode=1, direction=1, velocity=None)
             self.maniuplator.approachAxesPosition(axes=[2, 3],
                                                   approach_mode=0,
                                                   positions=[500, 500],
                                                   speed_mode=1)
 
-    def errorDialog(self, error_message):
+    def returnToCraniotomy(self):
+        if self.inBrain():
+            msg = 'Looks like the pipette is still in the brain.\nAborting command.'
+            result = self.errorDialog(msg, kind='warning')
+            pass
+        else:
+            self.manipulator.approachAxesPosition(axes=[2, 3],
+                                                  approach_mode=0,
+                                                  positions=[500, 1000],
+                                                  speed_mode=1)
+
+    def inBrain(self):
+        if float(self.position_panel.read_x.text()) < 100.0:
+            return True
+        else:
+            return False
+
+    def errorDialog(self, error_message, kind='choice'):
         """Generate error dialog to notify user of a problem
 
         Parameters
@@ -292,11 +305,16 @@ class ControlsPanel(QGroupBox):
         error_box.setIcon(QtWidgets.QMessageBox.Critical)
         error_box.setWindowTitle('Error')
         error_box.setText(error_message)
-        error_box.setStandardButtons(QMessageBox.Retry | QMessageBox.Cancel)
-        error_box.setDefaultButton(QMessageBox.Cancel)
 
-        proceed_btn = error_box.button(QMessageBox.Retry)
-        proceed_btn.setText('Proceed Anyway')
+        if kind == 'choice':
+            error_box.setStandardButtons(QMessageBox.Retry | QMessageBox.Cancel)
+            error_box.setDefaultButton(QMessageBox.Cancel)
+
+            proceed_btn = error_box.button(QMessageBox.Retry)
+            proceed_btn.setText('Proceed Anyway')
+        elif kind == 'warning':
+            error_box.setStandardButtons(QMessageBox.Ok)
+            error_box.setDefaultButton(QMessageBox.Ok)
 
         return error_box.exec()
 
@@ -307,27 +325,25 @@ class ApproachWindow(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.setWindowTitle('Approach')
 
         layout = QGridLayout()
         self.setLayout(layout)
         self.speed_group = QButtonGroup(layout)
 
-        self.createPositionBox()
+        self.createPositionBoxes()
         self.createRadioButtons()
         self.createRadioBox()
         self.createGoButton()
 
         layout.addWidget(self.createAxisLabel('X'), 0, 0)
         layout.addWidget(self.goto_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(),
-                         0,
-                         2,
-                         alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 0, 2, alignment=QtCore.Qt.AlignLeft)
 
         layout.addWidget(self.speed_selection_group, 1, 1)
         layout.addWidget(self.go_btn, 2, 1)
 
-    def createPositionBox(self):
+    def createPositionBoxes(self):
         self.goto_x = QLineEdit('')
         self.goto_x.setStyleSheet('padding:20px')
         self.goto_x.setFont(QFont('Helvetica', 16))
@@ -383,9 +399,9 @@ class ApproachWindow(QWidget):
 
     @Slot(list, float, list, int)
     def getInputPosition(self):
+        xcoord = self.goto_x.text()
         try:
-            xcoord = float(self.goto_x.text())
-            self.submitGoTo.emit([1], 0, [xcoord], 0)
+            self.submitGoTo.emit([1], 0, [float(xcoord)], 0)
         except ValueError:
             pass
         self.close()
@@ -405,11 +421,22 @@ class ApproachWindow(QWidget):
         self.submitSpeed.emit([1], 0, velocity)
 
 
+class AboutWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('About')
+
+        self.label = QLabel(__about__)
+        self.label.setWordWrap(True)
+        # label.setText(__about__)
+        self.label.show()
+
+
 class MainWindow(QMainWindow):
 
     CONFIG = LoadConfig().Gui()
     PATH = CONFIG['data_path']
-    DEBUG = CONFIG['debug']
+    DEBUG = CONFIG['debug'] == 'True'
 
     def __init__(self, interface):
         super().__init__()
@@ -436,3 +463,35 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(QWidget())
         self.centralWidget().setLayout(self.content_layout)
+
+        self._createActions()
+        self._connectActions()
+        self._createMenuBar()
+
+    def _createActions(self):
+        self.saveAction = QAction('&Save', self)
+        self.exitAction = QAction('&Exit', self)
+
+        # self.helpAction = QAction('&Help', self)
+        self.aboutAction = QAction('&About...', self)
+
+    def _createMenuBar(self):
+        menu_bar = QMenuBar(self)
+        self.setMenuBar(menu_bar)
+
+        file_menu = menu_bar.addMenu('&File')
+        file_menu.addAction(self.saveAction)
+        file_menu.addAction(self.exitAction)
+
+        help_menu = menu_bar.addMenu('&Help')
+        # help_menu.addAction(self.helpAction)
+        help_menu.addAction(self.aboutAction)
+
+    def _connectActions(self):
+        self.saveAction.triggered.connect(self.cells_panel.saveTableData)
+        self.exitAction.triggered.connect(self.close)
+        # self.helpAction.triggered.connect(self.helpContent)
+        self.aboutAction.triggered.connect(self.about)
+
+    def about(self):
+        self.about_window = AboutWindow()
