@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (QMenuBar, QMenu, QButtonGroup,
                                QGridLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit,
                                QMainWindow, QMessageBox,
-                               QPushButton, QRadioButton, QTableWidget,
+                               QPushButton, QRadioButton, 
+                               QCheckBox, QTableWidget,
                                QTableWidgetItem, QWidget)
 
 
@@ -110,6 +111,7 @@ class CellsPanel(QGroupBox):
         super().__init__("Cells", parent=None)
         self.position_panel = position_panel
         self.save_dir = save_dir
+        self.current_pipette = 1
 
         layout = QGridLayout()
         self.setLayout(layout)
@@ -117,10 +119,19 @@ class CellsPanel(QGroupBox):
         self.createTable()
         self.createAddPipetteButton()
         self.createSavePositionButton()
+        self.createPipetteCheckBox()
+        self.createPipetteCountBox()
+        self.createIncreasePipetteCountButton()
+        self.createAddPipetteButton()
 
-        layout.addWidget(self.table, 0, 0, 1, 0)
-        layout.addWidget(self.add_pipette_btn, 1, 0)
-        layout.addWidget(self.save_position_btn, 1, 1)
+        layout.addWidget(self.table, 0, 0, 1, 5)
+        layout.addWidget(self.pipette_checkbox, 1, 0)
+        layout.addWidget(self.pipette_count, 1, 1)
+        layout.addWidget(self.pipette_count_add_btn, 1, 3)
+        layout.addWidget(self.add_pipette_btn, 2, 0, 2, 2)
+        layout.addWidget(self.save_position_btn, 2, 2, 2, 3)
+
+        self.enablePipetteCount(state=0)
 
     def createTable(self):
         self.table = QTableWidget()
@@ -145,9 +156,42 @@ class CellsPanel(QGroupBox):
         self.save_position_btn.setToolTip('Save current position')
         self.save_position_btn.clicked.connect(self.addPatchedCell)
 
+    def createPipetteCheckBox(self):
+        self.pipette_checkbox = QCheckBox('Cell:')
+        self.pipette_checkbox.setToolTip('Enable automatic pipette number addition')
+        self.pipette_checkbox.stateChanged.connect(self.enablePipetteCount)
+
+    def createPipetteCountBox(self):
+        self.pipette_count = QLineEdit(str(self.current_pipette))
+
+    def createIncreasePipetteCountButton(self):
+        self.pipette_count_add_btn = QPushButton('+')
+        self.pipette_count_add_btn.setFixedSize(25,25)
+        self.pipette_count_add_btn.clicked.connect(self.increasePipetteCount)
+
+    def increasePipetteCount(self):
+        count = int(self.pipette_count.text()) + 1
+        self.pipette_count.setText(str(count))
+
+    def enablePipetteCount(self, state):
+        if state == 2:
+            self.pipette_count.setEnabled(True)
+            self.pipette_count_add_btn.setEnabled(True)
+        else:
+            self.pipette_count.setEnabled(False)
+            self.pipette_count_add_btn.setEnabled(False)
+
     def addRow(self):
         total_rows = self.table.rowCount()
         self.table.insertRow(total_rows)
+        # self.addCurrentPipette(total_rows-1)
+
+    def addCurrentPipette(self, current_row):
+        if self.WAVESURFER:
+            self.table.setItem(current_row, 0,
+                               QTableWidgetItem())
+        else:
+            pass
 
     def addPatchedCell(self):
         current_row = self.table.rowCount()
@@ -264,16 +308,16 @@ class ControlsPanel(QGroupBox):
                 time.sleep(1)
                 self.manipulator.approachAxesPosition(axes=[2, 3],
                                                       approach_mode=0,
-                                                      positions=[500, 500],
+                                                      positions=[-26000, 26000],
                                                       speed_mode=1)
             else:
                 pass
 
         else:
             self.manipulator.moveAxis(axis=1, speed_mode=1, direction=1, velocity=None)
-            self.maniuplator.approachAxesPosition(axes=[2, 3],
+            self.manipulator.approachAxesPosition(axes=[2, 3],
                                                   approach_mode=0,
-                                                  positions=[500, 500],
+                                                  positions=[-26000, 26000],
                                                   speed_mode=1)
 
     def returnToCraniotomy(self):
@@ -326,6 +370,10 @@ class ApproachWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Approach')
+
+        # default speed to 'slow'
+        self.speed = 'slow'
+        self.setToggledSpeed()
 
         layout = QGridLayout()
         self.setLayout(layout)
@@ -437,6 +485,7 @@ class MainWindow(QMainWindow):
     CONFIG = LoadConfig().Gui()
     PATH = CONFIG['data_path']
     DEBUG = CONFIG['debug'] == 'True'
+    WAVESURFER = CONFIG['wavesurfer'] == 'True'
 
     def __init__(self, interface):
         super().__init__()
