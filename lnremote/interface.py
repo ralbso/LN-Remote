@@ -11,17 +11,8 @@ from gui import MainWindow
 from manipulator import LuigsAndNeumannSM10
 
 import time
-from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtCore import (QMutex, QObject, QRect, QRunnable, QSize, QThread,
-                            QWaitCondition, Signal, Slot)
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog,
-                               QFileDialog, QFormLayout, QGridLayout,
-                               QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-                               QListView, QListWidget, QMainWindow,
-                               QMessageBox, QPushButton, QRadioButton,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout,
-                               QWidget)
+from PySide6.QtCore import QMutex, QObject, QThread, QWaitCondition, Signal, Slot
+from PySide6.QtWidgets import QApplication
 
 
 class Interface:
@@ -35,10 +26,11 @@ class Interface:
 
     def __init__(self):
         self.gui = QApplication([])
-        self.main_window = MainWindow(interface=self)
 
         self.manipulator = LuigsAndNeumannSM10()
-        self.manipulator.initializeManipulator(connection_type=self.CONNECTION.lower())
+        self.manipulator.initializeManipulator()
+
+        self.main_window = MainWindow(interface=self)
 
         self.worker_wait_condition = QWaitCondition()
         self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition, manipulator=self.manipulator)
@@ -56,9 +48,6 @@ class Interface:
         self.main_window.show()
         self.getCurrentPosition()
         return self.gui.exec_()
-
-    def connectToManipulator(self):
-        self.manipulator.initializeManipulator(connection_type=self.CONNECTION)
 
     def getCurrentPosition(self):
         self.worker_wait_condition.wakeOne()

@@ -37,7 +37,8 @@ class LuigsAndNeumannSM10:
     IP = CONFIG['ip']
     PORT = int(CONFIG['port'])
     SERIAL = CONFIG['serial']
-    CONNECTION = CONFIG['connection']
+    BAUDRATE = int(CONFIG['baudrate'])
+    CONNECTION = CONFIG['connection'].lower()
 
     def __init__(self):
         super().__init__()
@@ -47,7 +48,8 @@ class LuigsAndNeumannSM10:
 
         self.cmd_lock = threading.Lock()
 
-        self.connection_type = 'socket'
+        self.manipulator = serial.Serial()
+        self.manipulator.baudrate = self.BAUDRATE
 
     def __del__(self):
         try:
@@ -57,15 +59,16 @@ class LuigsAndNeumannSM10:
         finally:
             print('Connection to SM10 closed.')
 
-    def initializeManipulator(self, connection_type='socket'):
-        self.connection_type = connection_type
+    def initializeManipulator(self):
         # establish serial connection
-        if connection_type == 'serial':
-            self.device = self.findManipulator(self.SERIAL)
-            self.manipulator = self.establishSerialConnection(self.device, self._timeout,
-                                                              self.VERBOSE)
-
-        elif connection_type == 'socket':
+        if self.CONNECTION == 'serial':
+            device = self.findManipulator(self.SERIAL)
+            self.manipulator = self.establishSerialConnection(device, self._timeout,
+                                                                self.VERBOSE)
+            # self.manipulator.open()
+                
+        # establish ethernet connection
+        elif self.CONNECTION == 'socket':
             print('Testing ethernet connection...')
             s = socket.socket()
             try:
@@ -75,8 +78,12 @@ class LuigsAndNeumannSM10:
             finally:
                 s.close()
 
-        elif connection_type == 'dummy':
+        elif self.CONNECTION == 'dummy':
             print('Initializing dummy manipulator...')
+
+    def clearBuffer(self):
+        self.manipulator.reset_input_buffer()
+        self.manipulator.reset_output_buffer()
 
     @staticmethod
     def findManipulator(serial_number):
@@ -99,9 +106,6 @@ class LuigsAndNeumannSM10:
 
         ser = serial.Serial(device,
                             baudrate=115200,
-                            bytesize=serial.EIGHTBITS,
-                            parity=serial.PARITY_NONE,
-                            stopbits=serial.STOPBITS_ONE,
                             timeout=timeout,
                             write_timeout=2)
 
@@ -135,13 +139,13 @@ class LuigsAndNeumannSM10:
             print('Raw command:', self.bytes_command)
 
         # dealing with serial has proven to be quite limiting and challenging
-        if self.connection_type == 'serial':
+        if self.CONNECTION == 'serial':
             if resp_nbytes == 0:
                 with self.cmd_lock:
                     self.manipulator.write(self.bytes_command)
 
                     if self.VERBOSE:
-                        print('Command sent')
+                        print('Cmd sent')
                     return None
 
             else:
@@ -149,7 +153,7 @@ class LuigsAndNeumannSM10:
                     self.manipulator.write(self.bytes_command)
 
                     if self.VERBOSE:
-                        print('Command sent')
+                        print('Cmd sent')
 
                     expected_response = binascii.unhexlify('06' + cmd_id)
                     time.sleep(0.01)
@@ -182,7 +186,7 @@ class LuigsAndNeumannSM10:
                     e = f'Expected {binascii.hexlify(expected_response)}, but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
                     raise serial.SerialException(e)
 
-        elif self.connection_type == 'socket':
+        elif self.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.IP, self.PORT))
                 s.sendall(self.bytes_command)
@@ -191,7 +195,7 @@ class LuigsAndNeumannSM10:
                 else:
                     ans = s.recv(resp_nbytes)
 
-        elif self.connection_type == 'dummy':
+        elif self.CONNECTION == 'dummy':
             ans = None
             print(command)
 

@@ -12,7 +12,7 @@ from pathlib import Path
 import datetime
 
 from config_loader import LoadConfig
-from manipulator import LuigsAndNeumannSM10
+# from manipulator import LuigsAndNeumannSM10
 from __init__ import __about__
 
 from PySide6 import QtCore, QtWidgets
@@ -131,7 +131,7 @@ class CellsPanel(QGroupBox):
         layout.addWidget(self.add_pipette_btn, 2, 0, 2, 2)
         layout.addWidget(self.save_position_btn, 2, 2, 2, 3)
 
-        self.enablePipetteCount(state=0)
+        self.enablePipetteCount()
 
     def createTable(self):
         self.table = QTableWidget()
@@ -173,8 +173,8 @@ class CellsPanel(QGroupBox):
         count = int(self.pipette_count.text()) + 1
         self.pipette_count.setText(str(count))
 
-    def enablePipetteCount(self, state):
-        if state == 2:
+    def enablePipetteCount(self):
+        if self.pipette_checkbox.isChecked():
             self.pipette_count.setEnabled(True)
             self.pipette_count_add_btn.setEnabled(True)
         else:
@@ -184,17 +184,21 @@ class CellsPanel(QGroupBox):
     def addRow(self):
         total_rows = self.table.rowCount()
         self.table.insertRow(total_rows)
-        # self.addCurrentPipette(total_rows-1)
+        self.addCurrentPipette(total_rows)
 
     def addCurrentPipette(self, current_row):
-        if self.WAVESURFER:
-            self.table.setItem(current_row, 0,
-                               QTableWidgetItem())
-        else:
-            pass
+        print(self.pipette_count.text())
+        
 
     def addPatchedCell(self):
         current_row = self.table.rowCount()
+        current_pipette = self.pipette_count.text()
+        if self.pipette_checkbox.isChecked():
+            self.table.setItem(current_row - 1, 0,
+                               QTableWidgetItem(current_pipette))
+        else:
+            pass
+
         current_position = self.position_panel.read_x.text()
         self.table.setItem(current_row - 1, 1,
                            QTableWidgetItem(current_position))
@@ -315,6 +319,7 @@ class ControlsPanel(QGroupBox):
 
         else:
             self.manipulator.moveAxis(axis=1, speed_mode=1, direction=1, velocity=None)
+            time.sleep(0.5)
             self.manipulator.approachAxesPosition(axes=[2, 3],
                                                   approach_mode=0,
                                                   positions=[-26000, 26000],
@@ -499,10 +504,11 @@ class MainWindow(QMainWindow):
         self.setMinimumWidth(400)
         self.setFont(QFont('Helvetica', 14))
 
-        self.manipulator = LuigsAndNeumannSM10()
-        self.position_panel = PositionPanel(self.manipulator, self.interface)
+        # self.manipulator = LuigsAndNeumannSM10()
+        # self.manipulator.initializeManipulator()
+        self.position_panel = PositionPanel(self.interface.manipulator, self.interface)
         self.cells_panel = CellsPanel(self.position_panel, self.PATH)
-        self.controls_panel = ControlsPanel(self.manipulator,
+        self.controls_panel = ControlsPanel(self.interface.manipulator,
                                             self.position_panel)
 
         self.content_layout = QGridLayout()
