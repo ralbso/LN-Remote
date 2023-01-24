@@ -10,17 +10,9 @@ from config_loader import LoadConfig
 from gui import MainWindow
 from manipulator import LuigsAndNeumannSM10
 
-from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtCore import (QMutex, QObject, QRect, QRunnable, QSize, QThread,
-                            QWaitCondition, Signal, Slot)
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QDialog,
-                               QFileDialog, QFormLayout, QGridLayout,
-                               QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-                               QListView, QListWidget, QMainWindow,
-                               QMessageBox, QPushButton, QRadioButton,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout,
-                               QWidget)
+import time
+from PySide6.QtCore import QMutex, QObject, QThread, QWaitCondition, Signal, Slot
+from PySide6.QtWidgets import QApplication
 
 
 class Interface:
@@ -29,18 +21,20 @@ class Interface:
     IP = CONFIG['ip']
     PORT = CONFIG['port']
     SERIAL = CONFIG['serial']
-    DEBUG = CONFIG['debug']
+    DEBUG = CONFIG['debug'] == 'True'
     CONNECTION = CONFIG['connection']
 
     def __init__(self):
         self.gui = QApplication([])
-        self.main_window = MainWindow(interface=self)
 
         self.manipulator = LuigsAndNeumannSM10()
-        self.manipulator.initializeManipulator(connection_type=self.CONNECTION.lower())
+        self.manipulator.initializeManipulator()
+
+        self.main_window = MainWindow(interface=self)
 
         self.worker_wait_condition = QWaitCondition()
-        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition, manipulator=self.manipulator)
+        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition, 
+                                                    manipulator=self.manipulator)
         self.acquisition_thread = QThread()
 
         self.acquisition_worker.moveToThread(self.acquisition_thread)
@@ -56,9 +50,6 @@ class Interface:
         self.getCurrentPosition()
         return self.gui.exec_()
 
-    def connectToManipulator(self):
-        self.manipulator.initializeManipulator(connection_type=self.CONNECTION)
-
     def getCurrentPosition(self):
         self.worker_wait_condition.wakeOne()
 
@@ -69,6 +60,7 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def onExit(self):
+        self.acquisition_thread.terminate()
         self.main_window.cells_panel.saveTableData()
         print('Closing GUI...')
 
@@ -90,6 +82,7 @@ class AcquisitionWorker(QObject):
             self.wait_condition.wait(self.mutex)
             self.mutex.unlock()
 
+            time.sleep(0.25)
             self.data = self.manipulator.readManipulator([1, 2, 3])
             self.data_ready.emit()
 

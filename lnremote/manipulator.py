@@ -7,9 +7,7 @@ Author: rmojica
 """
 
 import binascii
-import configparser
 import ctypes
-import pathlib
 import socket
 import struct
 import threading
@@ -19,10 +17,12 @@ import numpy as np
 import serial
 import serial.tools.list_ports
 
+from config_loader import LoadConfig
+
 
 class LuigsAndNeumannSM10:
     """Represent Luigs and Neumann SM10 manipulator.\n
-    To issue commands, the following general structure must be followed:
+    To issue commands, the following general structure must be followed:\n
     `<SYN><CommandID><nFollowingBytes><Args><CRCMSB><CRCLSB>`
     """
     # set speed limit when pipette is inside the brain
@@ -31,23 +31,24 @@ class LuigsAndNeumannSM10:
     SYN = '16'  # SYN character
     ACK = '06'  # ACK character
 
-    config_path = pathlib.Path(__file__).absolute().parent.parent / "config.ini"
-    CONFIG = configparser.ConfigParser()
-    CONFIG.read(config_path)
-    VERBOSE = CONFIG['MANIPULATOR'].getboolean('DEBUG')
-    IP = CONFIG['MANIPULATOR']['IP']
-    PORT = int(CONFIG['MANIPULATOR']['PORT'])
-    SERIAL = CONFIG['MANIPULATOR']['SERIAL']
+    CONFIG = LoadConfig().Manipulator()
+    VERBOSE = CONFIG['debug'] == 'True'
+    IP = CONFIG['ip']
+    PORT = int(CONFIG['port'])
+    SERIAL = CONFIG['serial']
+    BAUDRATE = int(CONFIG['baudrate'])
+    CONNECTION = CONFIG['connection'].lower()
 
     def __init__(self):
         super().__init__()
         self._inside_brain = False
-        self._timeout = 0.01
+        self._timeout = None
         self._homed = False
 
-        self.cmd_lock = threading.Lock()
-
-        self.connection_type = 'socket'
+        if self.CONNECTION == 'serial':
+            self.io_lock = threading.Lock()
+            self.manipulator = serial.Serial()
+            self.manipulator.baudrate = self.BAUDRATE
 
     def __del__(self):
         try:
@@ -57,26 +58,32 @@ class LuigsAndNeumannSM10:
         finally:
             print('Connection to SM10 closed.')
 
-    def initializeManipulator(self, connection_type='socket'):
-        self.connection_type = connection_type
+    def initializeManipulator(self):
         # establish serial connection
-        if connection_type == 'serial':
-            self.device = self.findManipulator(self.SERIAL)
-            self.manipulator = self.establishSerialConnection(self.device, self._timeout,
-                                                              self.VERBOSE)
+        if self.CONNECTION == 'serial':
+            port = self.findManipulator(self.SERIAL)
+            self.manipulator = self.establishSerialConnection(
+                port, self._timeout, self.VERBOSE)
 
-        elif connection_type == 'socket':
+        # establish ethernet connection
+        elif self.CONNECTION == 'socket':
             print('Testing ethernet connection...')
             s = socket.socket()
             try:
                 s.connect((self.IP, self.PORT))
             except Exception as e:
-                print(f'Could not establish connection to IP {self.IP} and port {self.PORT}.\n{e}')
+                print(
+                    f'Could not establish connection to IP {self.IP} and port {self.PORT}.\n{e}'
+                )
             finally:
                 s.close()
 
-        elif connection_type == 'dummy':
+        elif self.CONNECTION == 'dummy':
             print('Initializing dummy manipulator...')
+
+    def clearBuffer(self):
+        self.manipulator.reset_input_buffer()
+        self.manipulator.reset_output_buffer()
 
     @staticmethod
     def findManipulator(serial_number):
@@ -93,20 +100,17 @@ class LuigsAndNeumannSM10:
             raise IOError('Could not find manipulator... Is it connected?')
 
     @staticmethod
-    def establishSerialConnection(device, timeout, verbose):
+    def establishSerialConnection(port, timeout, verbose):
         if verbose:
             print('Connecting...')
 
-        ser = serial.Serial(device,
+        ser = serial.Serial(port,
                             baudrate=115200,
-                            bytesize=serial.EIGHTBITS,
-                            parity=serial.PARITY_NONE,
-                            stopbits=serial.STOPBITS_ONE,
                             timeout=timeout,
                             write_timeout=2)
 
         if verbose:
-            print(f'Connected to SM10 on {device}.')
+            print(f'Connected to SM10 on {port}.')
         return ser
 
     # SEND COMMANDS
@@ -115,11 +119,12 @@ class LuigsAndNeumannSM10:
         # calculate CRC for command parameters
         (MSB, LSB) = self.crc16(data)
 
-        if self.VERBOSE:
-            print(data_n_bytes, len(data), data)
+        # if self.VERBOSE:
+        #     print(data_n_bytes, len(data), data)
 
         if data_n_bytes != len(data):
-            raise IndexError('The number of bytes sent does not match the data array.')
+            raise IndexError(
+                'The number of bytes sent does not match the data array.')
 
         # compile full command string
         command = self.SYN + cmd_id + '%0.2X' % data_n_bytes
@@ -131,58 +136,58 @@ class LuigsAndNeumannSM10:
         self.bytes_command = binascii.unhexlify(command)
 
         if self.VERBOSE:
-            print(cmd_id, command, MSB, LSB)
-            print('Raw command:', self.bytes_command)
+            print('Cmd:', cmd_id, command)
+            print('Raw cmd:', self.bytes_command)
 
-        # dealing with serial has proven to be quite limiting and challenging
-        if self.connection_type == 'serial':
-            if resp_nbytes == 0:
-                with self.cmd_lock:
+        if self.CONNECTION == 'serial':
+            with self.io_lock:
+                if resp_nbytes == 0:
                     self.manipulator.write(self.bytes_command)
 
                     if self.VERBOSE:
-                        print('Command sent')
+                        print('Cmd sent')
+                    self.clearBuffer()
+
                     return None
 
-            else:
-                with self.cmd_lock:
+                else:
                     self.manipulator.write(self.bytes_command)
 
                     if self.VERBOSE:
-                        print('Command sent')
+                        print('Cmd sent')
 
                     expected_response = binascii.unhexlify('06' + cmd_id)
                     time.sleep(0.01)
 
                     ans = self.manipulator.read(resp_nbytes)
 
-                    if self.VERBOSE:
-                        print('Raw response:', ans)
-
                     read_attempts = 0
                     while len(ans) < resp_nbytes:
                         if read_attempts >= 5:
-                            # self.manipulator.write(self.bytes_command)
+                            self.manipulator.write(self.bytes_command)
                             ans = self.manipulator.read(resp_nbytes)
 
                             if not len(ans) == resp_nbytes:
-                                raise serial.SerialException(
-                                    f'Could not get a response from manipulator for command {cmd_id}'
-                                )
+                                msg = f'Could not get a response from manipulator for command {cmd_id}'
+                                raise serial.SerialException(msg)
                             else:
                                 break
+                        
+                        msg = f'Only received {len(ans)}/{resp_nbytes} bytes. Attempting to read again.'
+                        print(msg)
 
-                        print(
-                            f'Only received {len(ans)}/{resp_nbytes} bytes. Attempting to read again.'
-                        )
                         ans += self.manipulator.read(resp_nbytes - len(ans))
                         read_attempts += 1
 
-                if ans[:len(expected_response)] != expected_response:
-                    e = f'Expected {binascii.hexlify(expected_response)}, but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
-                    raise serial.SerialException(e)
+                self.clearBuffer()
 
-        elif self.connection_type == 'socket':
+                if ans[:len(expected_response)] != expected_response:
+                    e = f'Expected response to start with {binascii.hexlify(expected_response)},'\
+                        + f' but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
+                    print(e)
+                #     raise serial.SerialException(e)
+
+        elif self.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.IP, self.PORT))
                 s.sendall(self.bytes_command)
@@ -191,9 +196,12 @@ class LuigsAndNeumannSM10:
                 else:
                     ans = s.recv(resp_nbytes)
 
-        elif self.connection_type == 'dummy':
+        elif self.CONNECTION == 'dummy':
             ans = None
             print(command)
+
+        if self.VERBOSE:
+            print('Raw response:', ans)
 
         return ans
 
@@ -236,7 +244,7 @@ class LuigsAndNeumannSM10:
         resp_nbytes = 4
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
-    def singleStep(self, axis, direction, distance, velocity):
+    def singleStep(self, axis, direction, increment=None, velocity=None):
         """Move desired `axis` by a single step in the chosen `direction`.
 
         Parameters
@@ -245,7 +253,7 @@ class LuigsAndNeumannSM10:
             Axis selection
         direction : int
             Desired direction to move the manipulator. Can be 1 or -1.
-        distance : float
+        increment : float
             Distance to travel in each step, in um.
         velocity : int
             Speed of the step.
@@ -256,11 +264,12 @@ class LuigsAndNeumannSM10:
         elif direction == -1:
             cmd_id = '0141'  # step decrement
 
-        distance = self.convertToFloatBytes(distance)
-        self.setStepDistance(axis, distance)
-        time.sleep(0.01)
-        self.setStepSpeed(axis, velocity)
-        time.sleep(0.01)
+        if (increment != None) and (velocity != None):
+            increment = self.convertToFloatBytes(increment)
+            self.setStepDistance(axis, increment)
+            time.sleep(0.01)
+            self.setStepVelocity(axis, velocity)
+            time.sleep(0.01)
 
         nbytes = 1
         data = ([axis])
@@ -280,7 +289,7 @@ class LuigsAndNeumannSM10:
         cmd_id = '044F'
         nbytes = 5
         data = ([axis] + list(increment))
-        resp_nbytes = 4
+        resp_nbytes = 0
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setStepVelocity(self, axis, velocity):
@@ -293,11 +302,11 @@ class LuigsAndNeumannSM10:
         velocity : int
             Velocity of the step.
         """
-        assert (velocity > 0 and velocity < 15)
+        assert (velocity > 0 and velocity < 16)
         cmd_id = '0158'
         nbytes = 2
         data = ([axis, velocity])
-        resp_nbytes = 4
+        resp_nbytes = 0
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def moveAxis(self, axis, speed_mode, direction, velocity=None):
@@ -312,7 +321,7 @@ class LuigsAndNeumannSM10:
         speed_mode : str
             Desired speed mode for movement, fast (1) or slow (0)
         direction : int
-            Direction of movement.
+            Direction of movement, positive (1) or negative (-1).
         velocity : int
             Velocity stage for desired speed mode. Must be greater than 0 and smaller than 15.
         """
@@ -348,7 +357,7 @@ class LuigsAndNeumannSM10:
         velocity : int
             Velocity stage for the chosen speed mode.
         """
-        assert (velocity > 0 and velocity < 15)
+        assert (velocity > 0 and velocity < 16)
         if speed_mode == 1:
             cmd_id = '0134'
         elif speed_mode == 0:
@@ -392,7 +401,6 @@ class LuigsAndNeumannSM10:
                 cmd_id = '004B'
 
         nbytes = 5
-        # position = bytearray(struct.pack('f', position))
         data = ([axis] + list(self.convertToFloatBytes(position)))
         resp_nbytes = 4
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
@@ -562,7 +570,7 @@ class LuigsAndNeumannSM10:
         velocity : int
             Velocity at which to approach home.
         """
-        assert (velocity > 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
         cmd_id = '0139'
         nbytes = 2
 
@@ -609,7 +617,9 @@ class LuigsAndNeumannSM10:
             self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
             self._homed = False  # prevent accidentally homing to arbitrary coordinates
         else:
-            print('Home command has not been executed. Could not return axis home.')
+            print(
+                'Home command has not been executed. Could not return axis home.'
+            )
 
     def abortHome(self, axis):
         """Abort home function.  
@@ -728,7 +738,7 @@ class LuigsAndNeumannSM10:
         length : int
             Ramp length.
         """
-        assert (length > 0 and length <= 15)
+        assert (length > 0 and length < 16)
         cmd_id = '003A'
 
         nbytes = 2
@@ -924,7 +934,7 @@ class LuigsAndNeumannSM10:
         velocity : int
             Velocity at which to move axes.
         """
-        assert (velocity > 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
 
         cmd_id = 'A024'
         group = self.getGroupAddress(axes)
@@ -968,7 +978,7 @@ class LuigsAndNeumannSM10:
             Velocity for movement.
         """
         assert (slot_number > 0 and slot_number <= 5)
-        assert (velocity > 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
 
         cmd_id = 'A110'
         group = self.getGroupAddress(axes)
@@ -992,7 +1002,7 @@ class LuigsAndNeumannSM10:
         distance : int
             How much distance each step will travel, in um
         """
-        assert (velocity > 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
 
         if direction == 1:
             cmd_id = 'A140'
@@ -1040,7 +1050,7 @@ class LuigsAndNeumannSM10:
         velocity : int
             Velocity at which to approach the home position.
         """
-        assert (velocity > 0 and velocity <= 15)
+        assert (velocity > 0 and velocity < 16)
 
         cmd_id = 'A022'
         group = self.getGroupAddress(axes)
@@ -1052,7 +1062,9 @@ class LuigsAndNeumannSM10:
             self.sendCommand(cmd_id, nbytes, data)
             self._homed = False  # prevent accidentally homing to arbitrary coordinates
         else:
-            print('Home command has not been executed. Could not return axis home.')
+            print(
+                'Home command has not been executed. Could not return axis home.'
+            )
 
     def abortAxesHome(self, axes):
         """Abort home function.  
@@ -1125,7 +1137,33 @@ class LuigsAndNeumannSM10:
         # response: <ACK><ID1><ID2><14><axis1><axis2><axis3><axis4><flPOS1><flPOS2><flPOS3><flPOS4><MSB><LSB>
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
-        time.sleep(0.1)
+
+        ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
+
+        try:
+            ans_decoded = [
+                struct.unpack('f', ans[8:12])[0],
+                struct.unpack('f', ans[12:16])[0],
+                struct.unpack('f', ans[16:20])[0],
+                struct.unpack('f', ans[20:24])[0]
+            ]
+            return ans_decoded
+        except:
+            pass
+
+    def readManipulator2(self, axes):
+        cmd_id = 'A131'
+
+        adr = [0] * 4
+        adr[:len(axes)] = axes
+
+        nbytes = 5
+        group_flag = 0xA0
+        data = ([group_flag] + adr)
+        # response: <ACK><ID1><ID2><14><axis1><axis2><axis3><axis4><flPOS1><flPOS2><flPOS3><flPOS4><MSB><LSB>
+        # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
+        resp_nbytes = 26
+
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
@@ -1162,8 +1200,13 @@ class LuigsAndNeumannSM10:
     def convertToFloatBytes(arg):
         if isinstance(arg, float):
             return bytearray(struct.pack('f', arg))
+        elif isinstance(arg, int):
+            return bytearray(struct.pack('f', float(arg)))
         elif isinstance(arg, list):
-            return [byte for item in arg for byte in bytearray(struct.pack('f', item))]
+            return [
+                byte for item in arg
+                for byte in bytearray(struct.pack('f', item))
+            ]
 
     @staticmethod
     def getGroupAddress(axes):
@@ -1209,15 +1252,13 @@ class LuigsAndNeumannSM10:
         CRC-16 (CCITT) implemented with a precomputed lookup table
         '''
         polyn = 0x1021
-        
+
         crc = 0xFFFF
         for byte in data_bytes:
             crc = (crc << 8) ^ polyn
             crc &= 0xFFFF
-        
+
         crcMSB = ctypes.c_ubyte(crc >> 8)
         crcLSB = ctypes.c_ubyte(crc)
 
         return (crcMSB.value, crcLSB.value)
-
-
