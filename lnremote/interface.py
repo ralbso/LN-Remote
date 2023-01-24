@@ -33,7 +33,8 @@ class Interface:
         self.main_window = MainWindow(interface=self)
 
         self.worker_wait_condition = QWaitCondition()
-        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition, manipulator=self.manipulator)
+        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition, 
+                                                    manipulator=self.manipulator)
         self.acquisition_thread = QThread()
 
         self.acquisition_worker.moveToThread(self.acquisition_thread)
@@ -59,6 +60,7 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def onExit(self):
+        self.acquisition_thread.terminate()
         self.main_window.cells_panel.saveTableData()
         print('Closing GUI...')
 
