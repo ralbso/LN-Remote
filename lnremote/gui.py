@@ -6,25 +6,22 @@ Created on: 12/01/2022 14:17:02
 Author: rmojica
 """
 
-import time
-import numpy
-from pathlib import Path
+import csv
 import datetime
+import time
+from pathlib import Path
+import numpy
 
-from config_loader import LoadConfig
-# from manipulator import LuigsAndNeumannSM10
 from __init__ import __about__
-
+from config_loader import LoadConfig
 from PySide6 import QtCore, QtWidgets
-from PySide6.QtCore import QSize, Signal, Slot
-from PySide6.QtGui import QFont, QAction
-from PySide6.QtWidgets import (QMenuBar, QMenu, QButtonGroup,
-                               QGridLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QLineEdit,
-                               QMainWindow, QMessageBox,
-                               QPushButton, QRadioButton, 
-                               QCheckBox, QTableWidget,
-                               QTableWidgetItem, QWidget)
+from PySide6.QtCore import QSize, Qt, Signal, Slot
+from PySide6.QtGui import QAction, QColor, QFont, QPalette
+from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGridLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+                               QMenuBar, QMessageBox, QPushButton,
+                               QRadioButton, QTableWidget, QTableWidgetItem,
+                               QWidget)
 
 
 class PositionPanel(QGroupBox):
@@ -37,42 +34,47 @@ class PositionPanel(QGroupBox):
         layout = QGridLayout()
         self.setLayout(layout)
 
+        self.createContents()
+        self.addToLayout(layout)
+
+    def createContents(self):
         self.createPositionBoxes()
         self.createStopButton()
         self.createResetAxesButton()
 
+    def addToLayout(self, layout):
         layout.addWidget(self.createAxisLabel('X'), 0, 0)
         layout.addWidget(self.createAxisLabel('Y'), 1, 0)
         layout.addWidget(self.createAxisLabel('Z'), 2, 0)
 
-        layout.addWidget(self.read_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.read_y, 1, 1, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.read_z, 2, 1, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.read_x, 0, 1, 1, 2, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.read_y, 1, 1, 1, 2, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.read_z, 2, 1, 1, 2, alignment=QtCore.Qt.AlignLeft)
 
-        layout.addWidget(self.createUnitLabel(), 0, 2, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(), 1, 2, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(), 2, 2, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 0, 3, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 1, 3, alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 2, 3, alignment=QtCore.Qt.AlignLeft)
 
-        layout.addWidget(self.stop_axes_btn, 3, 0, 1, 2)
-        layout.addWidget(self.zero_btn, 3, 2)
+        layout.addWidget(self.zero_btn, 3, 0, 1, 2)
+        layout.addWidget(self.stop_axes_btn, 3, 2, 1, 2)
 
     def createPositionBoxes(self):
         self.read_x = QLineEdit('')
-        self.read_x.setStyleSheet('padding:20px')
+        self.read_x.setStyleSheet('padding:15px')
         self.read_x.setToolTip('Position of X Axis')
         self.read_x.setFont(QFont('Helvetica', 14))
         self.read_x.setReadOnly(True)
         self.read_x.setMaximumWidth(150)
 
         self.read_y = QLineEdit('')
-        self.read_y.setStyleSheet('padding:20px')
+        self.read_y.setStyleSheet('padding:15px')
         self.read_y.setToolTip('Position of Y Axis')
         self.read_y.setFont(QFont('Helvetica', 14))
         self.read_y.setReadOnly(True)
         self.read_y.setMaximumWidth(150)
 
         self.read_z = QLineEdit('')
-        self.read_z.setStyleSheet('padding:20px')
+        self.read_z.setStyleSheet('padding:15px')
         self.read_z.setToolTip('Position of Z Axis')
         self.read_z.setFont(QFont('Helvetica', 14))
         self.read_z.setReadOnly(True)
@@ -80,14 +82,14 @@ class PositionPanel(QGroupBox):
     
     def createStopButton(self):
         self.stop_axes_btn = QPushButton('STOP')
-        self.stop_axes_btn.setStyleSheet('padding:20px')
+        self.stop_axes_btn.setStyleSheet('padding:15px')
         self.stop_axes_btn.setToolTip('Immediately stop movement')
         self.stop_axes_btn.clicked.connect(
             lambda: self.manipulator.stopAxes([1, 2, 3]))
 
     def createResetAxesButton(self):
         self.zero_btn = QPushButton('Zero Axes')
-        self.zero_btn.setStyleSheet('padding:20px')
+        self.zero_btn.setStyleSheet('padding:15px')
         self.zero_btn.setToolTip('Zero all axes')
         self.zero_btn.clicked.connect(
             lambda: self.manipulator.resetAxesZero([1, 2, 3]))
@@ -111,27 +113,37 @@ class CellsPanel(QGroupBox):
         super().__init__("Cells", parent=None)
         self.position_panel = position_panel
         self.save_dir = save_dir
+        self.date = datetime.datetime.now().date().strftime("%Y%m%d")
         self.current_pipette = 1
 
         layout = QGridLayout()
         self.setLayout(layout)
 
+        self.createContents()
+        self.addToLayout(layout)
+
+        self.enablePipetteCount()
+
+        self.loadTableData()
+
+    def createContents(self):
         self.createTable()
         self.createAddPipetteButton()
+        self.createRemovePipetteButton()
         self.createSavePositionButton()
         self.createPipetteCheckBox()
         self.createPipetteCountBox()
         self.createIncreasePipetteCountButton()
         self.createAddPipetteButton()
 
-        layout.addWidget(self.table, 0, 0, 1, 5)
-        layout.addWidget(self.pipette_checkbox, 1, 0)
-        layout.addWidget(self.pipette_count, 1, 1)
-        layout.addWidget(self.pipette_count_add_btn, 1, 3)
-        layout.addWidget(self.add_pipette_btn, 2, 0, 2, 2)
-        layout.addWidget(self.save_position_btn, 2, 2, 2, 3)
-
-        self.enablePipetteCount()
+    def addToLayout(self, layout):
+        layout.addWidget(self.table, 0, 0, 1, 6)
+        layout.addWidget(self.pipette_checkbox, 1, 1, 1, 2, QtCore.Qt.AlignRight)
+        layout.addWidget(self.pipette_count, 1, 3, 1, 1, QtCore.Qt.AlignLeft)
+        layout.addWidget(self.pipette_count_add_btn, 1, 4)
+        layout.addWidget(self.add_pipette_btn, 2, 0, 1, 2)
+        layout.addWidget(self.remove_pipette_btn, 2, 2, 1, 2)
+        layout.addWidget(self.save_position_btn, 2, 4, 1, 2)
 
     def createTable(self):
         self.table = QTableWidget()
@@ -146,13 +158,19 @@ class CellsPanel(QGroupBox):
 
     def createAddPipetteButton(self):
         self.add_pipette_btn = QPushButton('Add')
-        self.add_pipette_btn.setStyleSheet('padding:20px')
+        self.add_pipette_btn.setStyleSheet('padding:15px')
         self.add_pipette_btn.setToolTip('Add row to table')
         self.add_pipette_btn.clicked.connect(self.addRow)
 
+    def createRemovePipetteButton(self):
+        self.remove_pipette_btn = QPushButton('Remove')
+        self.remove_pipette_btn.setStyleSheet('padding:15px')
+        self.remove_pipette_btn.setToolTip('Remove row from table')
+        self.remove_pipette_btn.clicked.connect(self.removeRow)
+
     def createSavePositionButton(self):
         self.save_position_btn = QPushButton('Save Position')
-        self.save_position_btn.setStyleSheet('padding:20px')
+        self.save_position_btn.setStyleSheet('padding:15px')
         self.save_position_btn.setToolTip('Save current position')
         self.save_position_btn.clicked.connect(self.addPatchedCell)
 
@@ -163,6 +181,7 @@ class CellsPanel(QGroupBox):
 
     def createPipetteCountBox(self):
         self.pipette_count = QLineEdit(str(self.current_pipette))
+        self.pipette_count.setFixedWidth(50)
 
     def createIncreasePipetteCountButton(self):
         self.pipette_count_add_btn = QPushButton('+')
@@ -184,18 +203,18 @@ class CellsPanel(QGroupBox):
     def addRow(self):
         total_rows = self.table.rowCount()
         self.table.insertRow(total_rows)
-        self.addCurrentPipette(total_rows)
 
-    def addCurrentPipette(self, current_row):
-        print(self.pipette_count.text())
-        
+    def removeRow(self):
+        total_rows = self.table.rowCount()
+        self.table.removeRow(total_rows-1)
 
     def addPatchedCell(self):
         current_row = self.table.rowCount()
         current_pipette = self.pipette_count.text()
         if self.pipette_checkbox.isChecked():
             self.table.setItem(current_row - 1, 0,
-                               QTableWidgetItem(current_pipette))
+                               QTableWidgetItem(f'p{current_pipette}'))
+            self.pipette_count.setText(str(int(current_pipette)+1))
         else:
             pass
 
@@ -219,26 +238,49 @@ class CellsPanel(QGroupBox):
     def saveTableData(self):
         print('Saving pipettes...')
         self.getTableData()
-        date = datetime.datetime.now().date().strftime("%Y%m%d")
-        save_dir = Path(f'{self.save_dir}/{date}')
+        
+        save_dir = Path(f'{self.save_dir}/{self.date}')
         save_dir.mkdir(parents=True, exist_ok=True)
         filepath = Path(f'{save_dir}/pipettes.csv')
-        if not filepath.exists():
-            with open(filepath, 'ab') as f:
-                numpy.savetxt(f,
-                              self.pipettes,
-                              delimiter=",",
-                              comments="",
-                              header="pipette,depth",
-                              fmt='%s')
+        with open(filepath, 'w') as f:
+            numpy.savetxt(f,
+                            self.pipettes,
+                            delimiter=",",
+                            comments="",
+                            header="pipette,depth",
+                            fmt='%s')
 
-        else:
-            with open(filepath, 'ab') as f:
-                numpy.savetxt(f,
-                              self.pipettes,
-                              delimiter=",",
-                              comments="",
-                              fmt='%s')
+    def overwritePipetteCount(self):
+        prev_pipette = self.pipettes[len(self.pipettes) - 1][0]
+        last_count = int(prev_pipette[1:])
+        self.pipette_count.setText(str(last_count + 1))
+
+    def setTableData(self):
+        row_count = len(self.pipettes)
+        col_count = len(self.pipettes[0])
+
+        self.table.setRowCount(row_count - 1)
+        self.table.setColumnCount(col_count)
+
+        for row in range(1, row_count):
+            for col in range(col_count):
+                item = QTableWidgetItem(str(self.pipettes[row][col]))
+                self.table.setItem(row - 1, col, item)
+        
+        self.overwritePipetteCount()
+        self.pipette_count.setEnabled(True)
+        self.pipette_checkbox.setChecked(True)
+        self.pipette_count_add_btn.setEnabled(True)
+
+    def loadTableData(self):
+        load_dir = Path(f'{self.save_dir}/{self.date}/pipettes.csv') 
+        if load_dir.exists():
+            print('Loading pipettes...')
+            self.pipettes = []
+            with open(load_dir, newline='') as csvfile:
+                for row in csv.reader(csvfile, delimiter=','):
+                    self.pipettes.append(row)
+            self.setTableData()
 
 
 class ControlsPanel(QGroupBox):
@@ -265,25 +307,25 @@ class ControlsPanel(QGroupBox):
 
     def createApproachButton(self):
         self.approach_btn = QPushButton('Approach')
-        self.approach_btn.setStyleSheet('padding:20px')
+        self.approach_btn.setStyleSheet('padding:15px')
         self.approach_btn.setToolTip('Go to absolute coordinates')
         self.approach_btn.clicked.connect(self.approachPositionDialog)
 
     def createExitBrainButton(self):
         self.exit_brain_btn = QPushButton('Exit Tissue')
-        self.exit_brain_btn.setStyleSheet('padding:20px')
+        self.exit_brain_btn.setStyleSheet('padding:15px')
         self.exit_brain_btn.setToolTip('Slowly exit tissue to 100 um')
         self.exit_brain_btn.clicked.connect(self.exitBrain)
 
     def createMoveAwayButton(self):
         self.move_away_btn = QPushButton('Move Away')
-        self.move_away_btn.setStyleSheet('padding:20px')
+        self.move_away_btn.setStyleSheet('padding:15px')
         self.move_away_btn.setToolTip('Move stages away from the sample')
         self.move_away_btn.clicked.connect(self.moveAway)
 
     def createReturnButton(self):
         self.return_btn = QPushButton('Return')
-        self.return_btn.setStyleSheet('padding:20px')
+        self.return_btn.setStyleSheet('padding:15px')
         self.return_btn.setToolTip('Return pipette to the craniotomy')
         self.return_btn.clicked.connect(self.returnToCraniotomy)
 
@@ -398,7 +440,7 @@ class ApproachWindow(QWidget):
 
     def createPositionBoxes(self):
         self.goto_x = QLineEdit('')
-        self.goto_x.setStyleSheet('padding:20px')
+        self.goto_x.setStyleSheet('padding:15px')
         self.goto_x.setFont(QFont('Helvetica', 16))
         self.goto_x.setToolTip('Position of X Axis')
         self.goto_x.setMaximumWidth(150)
@@ -433,7 +475,7 @@ class ApproachWindow(QWidget):
 
     def createGoButton(self):
         self.go_btn = QPushButton('Go')
-        self.go_btn.setStyleSheet('padding:20px')
+        self.go_btn.setStyleSheet('padding:15px')
         self.go_btn.setToolTip('Go to absolute position')
         self.go_btn.setMaximumWidth(150)
         self.go_btn.clicked.connect(self.getInputPosition)
@@ -523,6 +565,8 @@ class MainWindow(QMainWindow):
         self._connectActions()
         self._createMenuBar()
 
+        # self.applyDarkTheme()
+
     def _createActions(self):
         self.saveAction = QAction('&Save', self)
         self.exitAction = QAction('&Exit', self)
@@ -550,3 +594,20 @@ class MainWindow(QMainWindow):
 
     def about(self):
         self.about_window = AboutWindow()
+
+    def applyDarkTheme(self):
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(53, 53, 53))
+        palette.setColor(QPalette.WindowText, Qt.white)
+        palette.setColor(QPalette.Base, QColor(25, 25, 25))
+        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+        palette.setColor(QPalette.ToolTipBase, Qt.black)
+        palette.setColor(QPalette.ToolTipText, Qt.white)
+        palette.setColor(QPalette.Text, Qt.white)
+        palette.setColor(QPalette.Button, QColor(53, 53, 53))
+        palette.setColor(QPalette.ButtonText, Qt.white)
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        self.setPalette(palette)
