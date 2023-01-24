@@ -15,13 +15,13 @@ import numpy
 from __init__ import __about__
 from config_loader import LoadConfig
 from PySide6 import QtCore, QtWidgets
-from PySide6.QtCore import QSize, Qt, Signal, Slot
+from PySide6.QtCore import QSize, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QPalette
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGridLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMainWindow,
                                QMenuBar, QMessageBox, QPushButton,
                                QRadioButton, QTableWidget, QTableWidgetItem,
-                               QWidget)
+                               QWidget, QStyle)
 
 
 class PositionPanel(QGroupBox):
@@ -43,9 +43,9 @@ class PositionPanel(QGroupBox):
         self.createResetAxesButton()
 
     def addToLayout(self, layout):
-        layout.addWidget(self.createAxisLabel('X'), 0, 0)
-        layout.addWidget(self.createAxisLabel('Y'), 1, 0)
-        layout.addWidget(self.createAxisLabel('Z'), 2, 0)
+        layout.addWidget(self.createAxisLabel('X'), 0, 0, alignment=QtCore.Qt.AlignRight)
+        layout.addWidget(self.createAxisLabel('Y'), 1, 0, alignment=QtCore.Qt.AlignRight)
+        layout.addWidget(self.createAxisLabel('Z'), 2, 0, alignment=QtCore.Qt.AlignRight)
 
         layout.addWidget(self.read_x, 0, 1, 1, 2, alignment=QtCore.Qt.AlignLeft)
         layout.addWidget(self.read_y, 1, 1, 1, 2, alignment=QtCore.Qt.AlignLeft)
@@ -103,7 +103,7 @@ class PositionPanel(QGroupBox):
     def createAxisLabel(self, axis: str):
         axis_label = QLabel(axis)
         axis_label.setFont(QFont('Helvetica', 18, QFont.Bold))
-        axis_label.setStyleSheet('padding:5px')
+        axis_label.setStyleSheet('padding:2px')
         return axis_label
 
 
@@ -115,6 +115,7 @@ class CellsPanel(QGroupBox):
         self.save_dir = save_dir
         self.date = datetime.datetime.now().date().strftime("%Y%m%d")
         self.current_pipette = 1
+        self._cols = 9
 
         layout = QGridLayout()
         self.setLayout(layout)
@@ -125,6 +126,10 @@ class CellsPanel(QGroupBox):
         self.enablePipetteCount()
 
         self.loadTableData()
+
+    def styleLayout(self, layout):
+        for i in range(self._cols):
+            layout.setColumnStretch(i, 1)
 
     def createContents(self):
         self.createTable()
@@ -137,13 +142,15 @@ class CellsPanel(QGroupBox):
         self.createAddPipetteButton()
 
     def addToLayout(self, layout):
-        layout.addWidget(self.table, 0, 0, 1, 6)
-        layout.addWidget(self.pipette_checkbox, 1, 1, 1, 2, QtCore.Qt.AlignRight)
-        layout.addWidget(self.pipette_count, 1, 3, 1, 1, QtCore.Qt.AlignLeft)
-        layout.addWidget(self.pipette_count_add_btn, 1, 4)
-        layout.addWidget(self.add_pipette_btn, 2, 0, 1, 2)
-        layout.addWidget(self.remove_pipette_btn, 2, 2, 1, 2)
-        layout.addWidget(self.save_position_btn, 2, 4, 1, 2)
+        self.styleLayout(layout)
+
+        layout.addWidget(self.table, 0, 0, 1, self._cols)
+        layout.addWidget(self.pipette_checkbox, 1, 2, 1, 3, QtCore.Qt.AlignRight)
+        layout.addWidget(self.pipette_count, 1, 5, 1, 1, QtCore.Qt.AlignLeft)
+        layout.addWidget(self.pipette_count_add_btn, 1, 6, 1, 1)
+        layout.addWidget(self.add_pipette_btn, 2, 0, 1, 3)
+        layout.addWidget(self.remove_pipette_btn, 2, 3, 1, 3)
+        layout.addWidget(self.save_position_btn, 2, 6, 1, 3)
 
     def createTable(self):
         self.table = QTableWidget()
@@ -158,19 +165,19 @@ class CellsPanel(QGroupBox):
 
     def createAddPipetteButton(self):
         self.add_pipette_btn = QPushButton('Add')
-        self.add_pipette_btn.setStyleSheet('padding:15px')
+        self.add_pipette_btn.setStyleSheet('padding:10px')
         self.add_pipette_btn.setToolTip('Add row to table')
         self.add_pipette_btn.clicked.connect(self.addRow)
 
     def createRemovePipetteButton(self):
-        self.remove_pipette_btn = QPushButton('Remove')
-        self.remove_pipette_btn.setStyleSheet('padding:15px')
+        self.remove_pipette_btn = QPushButton('Del')
+        self.remove_pipette_btn.setStyleSheet('padding:10px')
         self.remove_pipette_btn.setToolTip('Remove row from table')
         self.remove_pipette_btn.clicked.connect(self.removeRow)
 
     def createSavePositionButton(self):
-        self.save_position_btn = QPushButton('Save Position')
-        self.save_position_btn.setStyleSheet('padding:15px')
+        self.save_position_btn = QPushButton('Store')
+        self.save_position_btn.setStyleSheet('padding:10px')
         self.save_position_btn.setToolTip('Save current position')
         self.save_position_btn.clicked.connect(self.addPatchedCell)
 
@@ -181,7 +188,7 @@ class CellsPanel(QGroupBox):
 
     def createPipetteCountBox(self):
         self.pipette_count = QLineEdit(str(self.current_pipette))
-        self.pipette_count.setFixedWidth(50)
+        self.pipette_count.setFixedWidth(30)
 
     def createIncreasePipetteCountButton(self):
         self.pipette_count_add_btn = QPushButton('+')
@@ -267,10 +274,11 @@ class CellsPanel(QGroupBox):
                 item = QTableWidgetItem(str(self.pipettes[row][col]))
                 self.table.setItem(row - 1, col, item)
         
-        self.overwritePipetteCount()
-        self.pipette_count.setEnabled(True)
-        self.pipette_checkbox.setChecked(True)
-        self.pipette_count_add_btn.setEnabled(True)
+        if row_count > 1:
+            self.overwritePipetteCount()
+            self.pipette_count.setEnabled(True)
+            self.pipette_checkbox.setChecked(True)
+            self.pipette_count_add_btn.setEnabled(True)
 
     def loadTableData(self):
         load_dir = Path(f'{self.save_dir}/{self.date}/pipettes.csv') 
@@ -281,6 +289,136 @@ class CellsPanel(QGroupBox):
                 for row in csv.reader(csvfile, delimiter=','):
                     self.pipettes.append(row)
             self.setTableData()
+
+
+class NavigationPanel(QGroupBox):
+    def __init__(self, manipulator):
+        super().__init__('Navigation')
+
+        self.manipulator = manipulator
+        self._timeout = 100
+        self._increment = True
+        self._velocity = 15
+        
+        layout = QGridLayout()
+        self.setLayout(layout)
+
+        self.createContents()
+        self.addToLayout(layout)
+
+        self.setStepParameters(self._increment, self._velocity)
+
+    def styleLayout(self, layout):
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(2, 1)
+        layout.setColumnStretch(3, 1)
+        layout.setColumnStretch(4, 1)
+
+    def createContents(self):
+        self.createNavigateXInButton()
+        self.createNavigateXOutButton()
+        self.createNavigateYForwardButton()
+        self.createNavigateYBackwardButton()
+        self.createNavigateZUpButton()
+        self.createNavigateZDownButton()
+    
+    def addToLayout(self, layout):
+        self.styleLayout(layout)
+
+        layout.addWidget(self.navigate_x_in_btn, 1, 0)
+        layout.addWidget(self.navigate_x_out_btn, 1, 2)
+        layout.addWidget(self.navigate_y_fwd_btn, 0, 1)
+        layout.addWidget(self.navigate_y_bwd_btn, 2, 1)
+        layout.addWidget(self.navigate_z_up_btn, 0, 5)
+        layout.addWidget(self.navigate_z_down_btn, 2, 5)
+
+    def createNavigateXInButton(self):
+        left_button = QStyle.StandardPixmap.SP_ArrowLeft
+        icon = self.style().standardIcon(left_button)
+        self.navigate_x_in_btn = QPushButton()
+        self.navigate_x_in_btn.setIcon(icon)
+        self.navigate_x_in_btn.setStyleSheet('padding:10px')
+
+        self.x_in_timer = QTimer()
+        self.x_in_timer.timeout.connect(lambda: self.onTimeout(1, 1, 10, 15))
+        self.navigate_x_in_btn.clicked.connect(lambda: self.onTimeout(1, 1, 10, 15))
+        self.navigate_x_in_btn.pressed.connect(lambda: self.x_in_timer.start(self._timeout))
+        self.navigate_x_in_btn.released.connect(lambda: self.x_in_timer.stop())
+
+    def createNavigateXOutButton(self):
+        right_button = QStyle.StandardPixmap.SP_ArrowRight
+        icon = self.style().standardIcon(right_button)
+        self.navigate_x_out_btn = QPushButton()
+        self.navigate_x_out_btn.setIcon(icon)
+        self.navigate_x_out_btn.setStyleSheet('padding:10px')
+
+        self.x_out_timer = QTimer()
+        self.x_out_timer.timeout.connect(lambda: self.onTimeout(1, -1, 10, 15))
+        self.navigate_x_out_btn.clicked.connect(lambda: self.onTimeout(1, -1, 10, 15))
+        self.navigate_x_out_btn.pressed.connect(lambda: self.x_out_timer.start(self._timeout))
+        self.navigate_x_out_btn.released.connect(lambda: self.x_out_timer.stop())
+
+    def createNavigateYForwardButton(self):
+        fwd_button = QStyle.StandardPixmap.SP_ArrowUp
+        icon = self.style().standardIcon(fwd_button)
+        self.navigate_y_fwd_btn = QPushButton()
+        self.navigate_y_fwd_btn.setIcon(icon)
+        self.navigate_y_fwd_btn.setStyleSheet('padding:10px')
+
+        self.y_fwd_timer = QTimer()
+        self.y_fwd_timer.timeout.connect(lambda: self.onTimeout(2, 1, 10, 15))
+        self.navigate_y_fwd_btn.clicked.connect(lambda: self.onTimeout(2, 1, 10, 15))
+        self.navigate_y_fwd_btn.pressed.connect(lambda: self.y_fwd_timer.start(self._timeout))
+        self.navigate_y_fwd_btn.released.connect(lambda: self.y_fwd_timer.stop())
+
+    def createNavigateYBackwardButton(self):
+        bwd_button = QStyle.StandardPixmap.SP_ArrowDown
+        icon = self.style().standardIcon(bwd_button)
+        self.navigate_y_bwd_btn = QPushButton()
+        self.navigate_y_bwd_btn.setIcon(icon)
+        self.navigate_y_bwd_btn.setStyleSheet('padding:10px')
+
+        self.y_bwd_timer = QTimer()
+        self.y_bwd_timer.timeout.connect(lambda: self.onTimeout(2, -1, 10, 15))
+        self.navigate_y_bwd_btn.clicked.connect(lambda: self.onTimeout(2, -1, 10, 15))
+        self.navigate_y_bwd_btn.pressed.connect(lambda: self.y_bwd_timer.start(self._timeout))
+        self.navigate_y_bwd_btn.released.connect(lambda: self.y_bwd_timer.stop())
+
+    def createNavigateZUpButton(self):
+        up_button = QStyle.StandardPixmap.SP_ArrowUp
+        icon = self.style().standardIcon(up_button)
+        self.navigate_z_up_btn = QPushButton()
+        self.navigate_z_up_btn.setIcon(icon)
+        self.navigate_z_up_btn.setStyleSheet('padding:10px')
+
+        self.z_up_timer = QTimer()
+        self.z_up_timer.timeout.connect(lambda: self.onTimeout(3, 1, 10, 15))
+        self.navigate_z_up_btn.clicked.connect(lambda: self.onTimeout(3, 1, 10, 15))
+        self.navigate_z_up_btn.pressed.connect(lambda: self.z_up_timer.start(self._timeout))
+        self.navigate_z_up_btn.released.connect(lambda: self.z_up_timer.stop())
+
+    def createNavigateZDownButton(self):
+        down_button = QStyle.StandardPixmap.SP_ArrowDown
+        icon = self.style().standardIcon(down_button)
+        self.navigate_z_down_btn = QPushButton()
+        self.navigate_z_down_btn.setIcon(icon)
+        self.navigate_z_down_btn.setStyleSheet('padding:10px')
+
+        self.z_down_timer = QTimer()
+        self.z_down_timer.timeout.connect(lambda: self.onTimeout(3, -1, 10, 15))
+        self.navigate_z_down_btn.clicked.connect(lambda: self.onTimeout(3, -1, 10, 15))
+        self.navigate_z_down_btn.pressed.connect(lambda: self.z_down_timer.start(self._timeout))
+        self.navigate_z_down_btn.released.connect(lambda: self.z_down_timer.stop())
+
+    def onTimeout(self, axis, direction, increment, velocity):
+        self.manipulator.singleStep(axis, direction)
+
+    def setStepParameters(self, increment, velocity):
+        increment = self.manipulator.convertToFloatBytes(increment)
+        for axis in range(1,4):
+            self.manipulator.setStepDistance(axis, increment)
+            self.manipulator.setStepVelocity(axis, velocity)
 
 
 class ControlsPanel(QGroupBox):
@@ -295,11 +433,16 @@ class ControlsPanel(QGroupBox):
         layout = QGridLayout()
         self.setLayout(layout)
 
+        self.createContents()
+        self.addToLayout(layout)
+
+    def createContents(self):
         self.createApproachButton()
         self.createExitBrainButton()
         self.createMoveAwayButton()
         self.createReturnButton()
 
+    def addToLayout(self, layout):
         layout.addWidget(self.approach_btn, 0, 0)
         layout.addWidget(self.exit_brain_btn, 0, 1)
         layout.addWidget(self.move_away_btn, 1, 0)
@@ -349,8 +492,7 @@ class ControlsPanel(QGroupBox):
             msg = 'Looks like the pipette is still in the brain.\nAborting command.'
             result = self.errorDialog(msg, kind='choice')
             if result == 524288:
-                # first exit brain
-                self.exitBrain()
+                self.exitBrain()  # first exit brain
                 time.sleep(1)
                 self.manipulator.approachAxesPosition(axes=[2, 3],
                                                       approach_mode=0,
@@ -547,17 +689,17 @@ class MainWindow(QMainWindow):
         self.setFont(QFont('Helvetica', 14))
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
-        # self.manipulator = LuigsAndNeumannSM10()
-        # self.manipulator.initializeManipulator()
         self.position_panel = PositionPanel(self.interface.manipulator, self.interface)
         self.cells_panel = CellsPanel(self.position_panel, self.PATH)
+        self.navigation_panel = NavigationPanel(self.interface.manipulator)
         self.controls_panel = ControlsPanel(self.interface.manipulator,
                                             self.position_panel)
 
         self.content_layout = QGridLayout()
         self.content_layout.addWidget(self.position_panel, 0, 0)
         self.content_layout.addWidget(self.cells_panel, 0, 1)
-        self.content_layout.addWidget(self.controls_panel, 1, 0, 1, 2)
+        self.content_layout.addWidget(self.navigation_panel, 1, 0)
+        self.content_layout.addWidget(self.controls_panel, 1, 1)
 
         self.setCentralWidget(QWidget())
         self.centralWidget().setLayout(self.content_layout)
