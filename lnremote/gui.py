@@ -545,6 +545,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(400, 300))
         self.setMinimumWidth(400)
         self.setFont(QFont('Helvetica', 14))
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
         # self.manipulator = LuigsAndNeumannSM10()
         # self.manipulator.initializeManipulator()
