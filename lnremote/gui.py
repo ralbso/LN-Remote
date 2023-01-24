@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGridLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMainWindow,
                                QMenuBar, QMessageBox, QPushButton,
                                QRadioButton, QTableWidget, QTableWidgetItem,
-                               QWidget, QStyle)
+                               QWidget, QStyle, QComboBox)
 
 
 class PositionPanel(QGroupBox):
@@ -297,8 +297,13 @@ class NavigationPanel(QGroupBox):
 
         self.manipulator = manipulator
         self._timeout = 100
-        self._increment = True
-        self._velocity = 15
+        # self._increment = 10
+        # self._velocity = 15
+        self._speed_modes = {'slow': 0, 'fast': 1}
+        self.speed_mode = int(list(self._speed_modes.values())[0])
+
+        self._velocities = {'slow': 6, 'med': 10, 'fast': 15}
+        self.velocity = int(list(self._velocities.values())[0])
         
         layout = QGridLayout()
         self.setLayout(layout)
@@ -306,7 +311,8 @@ class NavigationPanel(QGroupBox):
         self.createContents()
         self.addToLayout(layout)
 
-        self.setStepParameters(self._increment, self._velocity)
+        self.enableNavigation()
+        self.setMovementParameters(self.speed_mode, self.velocity)
 
     def styleLayout(self, layout):
         layout.setColumnStretch(0, 1)
@@ -316,6 +322,9 @@ class NavigationPanel(QGroupBox):
         layout.setColumnStretch(4, 1)
 
     def createContents(self):
+        self.createNavigationCheckBox()
+        self.createNavigationSpeedDropdown()
+        self.createNavigationVelocityDropdown()
         self.createNavigateXInButton()
         self.createNavigateXOutButton()
         self.createNavigateYForwardButton()
@@ -326,12 +335,57 @@ class NavigationPanel(QGroupBox):
     def addToLayout(self, layout):
         self.styleLayout(layout)
 
-        layout.addWidget(self.navigate_x_in_btn, 1, 0)
-        layout.addWidget(self.navigate_x_out_btn, 1, 2)
-        layout.addWidget(self.navigate_y_fwd_btn, 0, 1)
-        layout.addWidget(self.navigate_y_bwd_btn, 2, 1)
-        layout.addWidget(self.navigate_z_up_btn, 0, 5)
-        layout.addWidget(self.navigate_z_down_btn, 2, 5)
+        layout.addWidget(self.navigation_checkbox, 0, 0, 1, 2)
+        layout.addWidget(self.navigation_speed_dropdown, 0, 2, 1, 2)
+        layout.addWidget(self.navigation_velocity_dropdown, 0, 4, 1, 2)
+        layout.addWidget(self.navigate_x_in_btn, 2, 0)
+        layout.addWidget(self.navigate_x_out_btn, 2, 2)
+        layout.addWidget(self.navigate_y_fwd_btn, 1, 1)
+        layout.addWidget(self.navigate_y_bwd_btn, 3, 1)
+        layout.addWidget(self.navigate_z_up_btn, 1, 5)
+        layout.addWidget(self.navigate_z_down_btn, 3, 5)
+
+    def createNavigationCheckBox(self):
+        self.navigation_checkbox = QCheckBox('Enable')
+        self.navigation_checkbox.setToolTip('Enable navigation keys')
+        self.navigation_checkbox.stateChanged.connect(self.enableNavigation)
+
+    def enableNavigation(self):
+        if self.navigation_checkbox.isChecked():
+            self.navigation_speed_dropdown.setEnabled(True)
+            self.navigate_x_in_btn.setEnabled(True)
+            self.navigate_x_out_btn.setEnabled(True)
+            self.navigate_y_fwd_btn.setEnabled(True)
+            self.navigate_y_bwd_btn.setEnabled(True)
+            self.navigate_z_up_btn.setEnabled(True)
+            self.navigate_z_down_btn.setEnabled(True)
+        else:
+            self.navigation_speed_dropdown.setEnabled(False)
+            self.navigate_x_in_btn.setEnabled(False)
+            self.navigate_x_out_btn.setEnabled(False)
+            self.navigate_y_fwd_btn.setEnabled(False)
+            self.navigate_y_bwd_btn.setEnabled(False)
+            self.navigate_z_up_btn.setEnabled(False)
+            self.navigate_z_down_btn.setEnabled(False)
+
+    def createNavigationSpeedDropdown(self):
+        self.navigation_speed_dropdown = QComboBox()
+        self.navigation_speed_dropdown.addItems(self._speed_modes)
+        self.navigation_speed_dropdown.currentTextChanged.connect(self.speedChanged)
+
+    def speedChanged(self, speed_mode):
+        self.speed_mode = self._speed_modes[speed_mode]
+            
+        self.setMovementParameters(self.speed_mode, self.velocity)
+
+    def createNavigationVelocityDropdown(self):
+        self.navigation_velocity_dropdown = QComboBox()
+        self.navigation_velocity_dropdown.addItems(list(self._velocities.keys()))
+        self.navigation_velocity_dropdown.currentTextChanged.connect(self.velocityChanged)
+
+    def velocityChanged(self, velocity):
+        self.velocity = self._velocities[velocity]
+        self.setMovementParameters(self.speed_mode, self.velocity)
 
     def createNavigateXInButton(self):
         left_button = QStyle.StandardPixmap.SP_ArrowLeft
@@ -340,11 +394,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_in_btn.setIcon(icon)
         self.navigate_x_in_btn.setStyleSheet('padding:10px')
 
-        self.x_in_timer = QTimer()
-        self.x_in_timer.timeout.connect(lambda: self.onTimeout(1, 1, 10, 15))
-        self.navigate_x_in_btn.clicked.connect(lambda: self.onTimeout(1, 1, 10, 15))
-        self.navigate_x_in_btn.pressed.connect(lambda: self.x_in_timer.start(self._timeout))
-        self.navigate_x_in_btn.released.connect(lambda: self.x_in_timer.stop())
+        ax = 1
+        self.navigate_x_in_btn.pressed.connect(lambda: self.onPress(ax, self.speed_mode, -1))
+        self.navigate_x_in_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateXOutButton(self):
         right_button = QStyle.StandardPixmap.SP_ArrowRight
@@ -353,11 +405,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_out_btn.setIcon(icon)
         self.navigate_x_out_btn.setStyleSheet('padding:10px')
 
-        self.x_out_timer = QTimer()
-        self.x_out_timer.timeout.connect(lambda: self.onTimeout(1, -1, 10, 15))
-        self.navigate_x_out_btn.clicked.connect(lambda: self.onTimeout(1, -1, 10, 15))
-        self.navigate_x_out_btn.pressed.connect(lambda: self.x_out_timer.start(self._timeout))
-        self.navigate_x_out_btn.released.connect(lambda: self.x_out_timer.stop())
+        ax = 1
+        self.navigate_x_out_btn.pressed.connect(lambda: self.onPress(ax, self.speed_mode, 1))
+        self.navigate_x_out_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateYForwardButton(self):
         fwd_button = QStyle.StandardPixmap.SP_ArrowUp
@@ -366,11 +416,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_fwd_btn.setIcon(icon)
         self.navigate_y_fwd_btn.setStyleSheet('padding:10px')
 
-        self.y_fwd_timer = QTimer()
-        self.y_fwd_timer.timeout.connect(lambda: self.onTimeout(2, 1, 10, 15))
-        self.navigate_y_fwd_btn.clicked.connect(lambda: self.onTimeout(2, 1, 10, 15))
-        self.navigate_y_fwd_btn.pressed.connect(lambda: self.y_fwd_timer.start(self._timeout))
-        self.navigate_y_fwd_btn.released.connect(lambda: self.y_fwd_timer.stop())
+        ax = 2
+        self.navigate_y_fwd_btn.pressed.connect(lambda: self.onPress(ax, self.speed_mode, 1))
+        self.navigate_y_fwd_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateYBackwardButton(self):
         bwd_button = QStyle.StandardPixmap.SP_ArrowDown
@@ -379,11 +427,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_bwd_btn.setIcon(icon)
         self.navigate_y_bwd_btn.setStyleSheet('padding:10px')
 
-        self.y_bwd_timer = QTimer()
-        self.y_bwd_timer.timeout.connect(lambda: self.onTimeout(2, -1, 10, 15))
-        self.navigate_y_bwd_btn.clicked.connect(lambda: self.onTimeout(2, -1, 10, 15))
-        self.navigate_y_bwd_btn.pressed.connect(lambda: self.y_bwd_timer.start(self._timeout))
-        self.navigate_y_bwd_btn.released.connect(lambda: self.y_bwd_timer.stop())
+        ax = 2
+        self.navigate_y_bwd_btn.pressed.connect(lambda: self.onPress(ax, self.speed_mode, -1))
+        self.navigate_y_bwd_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateZUpButton(self):
         up_button = QStyle.StandardPixmap.SP_ArrowUp
@@ -392,11 +438,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_z_up_btn.setIcon(icon)
         self.navigate_z_up_btn.setStyleSheet('padding:10px')
 
-        self.z_up_timer = QTimer()
-        self.z_up_timer.timeout.connect(lambda: self.onTimeout(3, 1, 10, 15))
-        self.navigate_z_up_btn.clicked.connect(lambda: self.onTimeout(3, 1, 10, 15))
-        self.navigate_z_up_btn.pressed.connect(lambda: self.z_up_timer.start(self._timeout))
-        self.navigate_z_up_btn.released.connect(lambda: self.z_up_timer.stop())
+        ax = 3
+        self.navigate_z_up_btn.pressed.connect(lambda: self.onPress(ax, self.speed_mode, 1))
+        self.navigate_z_up_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateZDownButton(self):
         down_button = QStyle.StandardPixmap.SP_ArrowDown
@@ -405,20 +449,19 @@ class NavigationPanel(QGroupBox):
         self.navigate_z_down_btn.setIcon(icon)
         self.navigate_z_down_btn.setStyleSheet('padding:10px')
 
-        self.z_down_timer = QTimer()
-        self.z_down_timer.timeout.connect(lambda: self.onTimeout(3, -1, 10, 15))
-        self.navigate_z_down_btn.clicked.connect(lambda: self.onTimeout(3, -1, 10, 15))
-        self.navigate_z_down_btn.pressed.connect(lambda: self.z_down_timer.start(self._timeout))
-        self.navigate_z_down_btn.released.connect(lambda: self.z_down_timer.stop())
+        ax = 3
+        self.navigate_z_down_btn.pressed.connect(lambda: self.onPress(ax, self.speed_mode, -1))
+        self.navigate_z_down_btn.released.connect(lambda: self.onRelease(ax))
 
-    def onTimeout(self, axis, direction, increment, velocity):
-        self.manipulator.singleStep(axis, direction)
+    def onPress(self, axis, speed_mode, direction, velocity=None):
+        self.manipulator.moveAxis(axis, speed_mode, direction, velocity)
 
-    def setStepParameters(self, increment, velocity):
-        increment = self.manipulator.convertToFloatBytes(increment)
+    def onRelease(self, axis):
+        self.manipulator.stopMovement(axis)
+
+    def setMovementParameters(self, speed_mode, velocity):
         for axis in range(1,4):
-            self.manipulator.setStepDistance(axis, increment)
-            self.manipulator.setStepVelocity(axis, velocity)
+            self.manipulator.setMovementVelocity(axis, speed_mode, velocity)
 
 
 class ControlsPanel(QGroupBox):
