@@ -354,6 +354,7 @@ class NavigationPanel(QGroupBox):
     def enableNavigation(self):
         if self.navigation_checkbox.isChecked():
             self.navigation_speed_dropdown.setEnabled(True)
+            self.navigation_velocity_dropdown.setEnabled(True)
             self.navigate_x_in_btn.setEnabled(True)
             self.navigate_x_out_btn.setEnabled(True)
             self.navigate_y_fwd_btn.setEnabled(True)
@@ -362,6 +363,7 @@ class NavigationPanel(QGroupBox):
             self.navigate_z_down_btn.setEnabled(True)
         else:
             self.navigation_speed_dropdown.setEnabled(False)
+            self.navigation_velocity_dropdown.setEnabled(False)
             self.navigate_x_in_btn.setEnabled(False)
             self.navigate_x_out_btn.setEnabled(False)
             self.navigate_y_fwd_btn.setEnabled(False)
@@ -371,7 +373,7 @@ class NavigationPanel(QGroupBox):
 
     def createNavigationSpeedDropdown(self):
         self.navigation_speed_dropdown = QComboBox()
-        self.navigation_speed_dropdown.addItems(self._speed_modes)
+        self.navigation_speed_dropdown.addItems(list(self._speed_modes.keys()))
         self.navigation_speed_dropdown.currentTextChanged.connect(self.speedChanged)
 
     def speedChanged(self, speed_mode):
@@ -389,8 +391,6 @@ class NavigationPanel(QGroupBox):
         self.setMovementParameters(self.speed_mode, self.velocity)
 
     def createNavigateXInButton(self):
-        # left_button = QStyle.StandardPixmap.SP_ArrowLeft
-        # icon = self.style().standardIcon(left_button)
         icon = QtGui.QIcon(":/icons/left-arrow.png")
         self.navigate_x_in_btn = QPushButton()
         self.navigate_x_in_btn.setIcon(icon)
@@ -401,8 +401,6 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_in_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateXOutButton(self):
-        # right_button = QStyle.StandardPixmap.SP_ArrowRight
-        # icon = self.style().standardIcon(right_button)
         icon = QtGui.QIcon(":/icons/right-arrow.png")
         self.navigate_x_out_btn = QPushButton()
         self.navigate_x_out_btn.setIcon(icon)
@@ -413,8 +411,6 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_out_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateYForwardButton(self):
-        # fwd_button = QStyle.StandardPixmap.SP_ArrowUp
-        # icon = self.style().standardIcon(fwd_button)
         icon = QtGui.QIcon(":/icons/up-arrow.png")
         self.navigate_y_fwd_btn = QPushButton()
         self.navigate_y_fwd_btn.setIcon(icon)
@@ -425,8 +421,6 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_fwd_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateYBackwardButton(self):
-        # bwd_button = QStyle.StandardPixmap.SP_ArrowDown
-        # icon = self.style().standardIcon(bwd_button)
         icon = QtGui.QIcon(":/icons/down-arrow.png")
         self.navigate_y_bwd_btn = QPushButton()
         self.navigate_y_bwd_btn.setIcon(icon)
@@ -437,8 +431,6 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_bwd_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateZUpButton(self):
-        # up_button = QStyle.StandardPixmap.SP_ArrowUp
-        # icon = self.style().standardIcon(up_button)
         icon = QtGui.QIcon(":/icons/up-arrow.png")
         self.navigate_z_up_btn = QPushButton()
         self.navigate_z_up_btn.setIcon(icon)
@@ -449,8 +441,6 @@ class NavigationPanel(QGroupBox):
         self.navigate_z_up_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateZDownButton(self):
-        # down_button = QStyle.StandardPixmap.SP_ArrowDown
-        # icon = self.style().standardIcon(down_button)
         icon = QtGui.QIcon(":/icons/down-arrow.png")
         self.navigate_z_down_btn = QPushButton()
         self.navigate_z_down_btn.setIcon(icon)
