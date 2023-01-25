@@ -1,9 +1,0 @@
-<!DOCTYPE RCC>
-<RCC version="1.0">
-    <qresource prefix="icons">
-        <file alias="up-arrow.png">./assets/icons/arrow-up-solid.png</file>
-        <file alias="down-arrow.png">./assets/icons/arrow-down-solid.png</file>
-        <file alias="left-arrow.png">./assets/icons/arrow-left-solid.png</file>
-        <file alias="right-arrow.png">./assets/icons/arrow-right-solid.png</file>
-    </qresource>
-</RCC>
