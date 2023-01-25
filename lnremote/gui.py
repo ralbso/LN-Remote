@@ -391,7 +391,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateXInButton(self):
         # left_button = QStyle.StandardPixmap.SP_ArrowLeft
         # icon = self.style().standardIcon(left_button)
-        icon = self.setIcon(QtGui.QIcon(":/icons/left-arrow.png"))
+        icon = QtGui.QIcon(":/icons/left-arrow.png")
         self.navigate_x_in_btn = QPushButton()
         self.navigate_x_in_btn.setIcon(icon)
         self.navigate_x_in_btn.setStyleSheet('padding:10px')
@@ -403,7 +403,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateXOutButton(self):
         # right_button = QStyle.StandardPixmap.SP_ArrowRight
         # icon = self.style().standardIcon(right_button)
-        icon = self.setIcon(QtGui.QIcon(":/icons/right-arrow.png"))
+        icon = QtGui.QIcon(":/icons/right-arrow.png")
         self.navigate_x_out_btn = QPushButton()
         self.navigate_x_out_btn.setIcon(icon)
         self.navigate_x_out_btn.setStyleSheet('padding:10px')
@@ -415,7 +415,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateYForwardButton(self):
         # fwd_button = QStyle.StandardPixmap.SP_ArrowUp
         # icon = self.style().standardIcon(fwd_button)
-        icon = self.setIcon(QtGui.QIcon(":/icons/up-arrow.png"))
+        icon = QtGui.QIcon(":/icons/up-arrow.png")
         self.navigate_y_fwd_btn = QPushButton()
         self.navigate_y_fwd_btn.setIcon(icon)
         self.navigate_y_fwd_btn.setStyleSheet('padding:10px')
@@ -427,7 +427,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateYBackwardButton(self):
         # bwd_button = QStyle.StandardPixmap.SP_ArrowDown
         # icon = self.style().standardIcon(bwd_button)
-        icon = self.setIcon(QtGui.QIcon(":/icons/down-arrow.png"))
+        icon = QtGui.QIcon(":/icons/down-arrow.png")
         self.navigate_y_bwd_btn = QPushButton()
         self.navigate_y_bwd_btn.setIcon(icon)
         self.navigate_y_bwd_btn.setStyleSheet('padding:10px')
@@ -439,7 +439,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateZUpButton(self):
         # up_button = QStyle.StandardPixmap.SP_ArrowUp
         # icon = self.style().standardIcon(up_button)
-        icon = self.setIcon(QtGui.QIcon(":/icons/up-arrow.png"))
+        icon = QtGui.QIcon(":/icons/up-arrow.png")
         self.navigate_z_up_btn = QPushButton()
         self.navigate_z_up_btn.setIcon(icon)
         self.navigate_z_up_btn.setStyleSheet('padding:10px')
@@ -451,7 +451,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateZDownButton(self):
         # down_button = QStyle.StandardPixmap.SP_ArrowDown
         # icon = self.style().standardIcon(down_button)
-        icon = self.setIcon(QtGui.QIcon(":/icons/down-arrow.png"))
+        icon = QtGui.QIcon(":/icons/down-arrow.png")
         self.navigate_z_down_btn = QPushButton()
         self.navigate_z_down_btn.setIcon(icon)
         self.navigate_z_down_btn.setStyleSheet('padding:10px')
