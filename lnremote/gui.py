@@ -11,10 +11,11 @@ import datetime
 import time
 from pathlib import Path
 import numpy
+import resources
 
 from __init__ import __about__
 from config_loader import LoadConfig
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import QSize, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QPalette
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGridLayout, QGroupBox,
@@ -388,8 +389,9 @@ class NavigationPanel(QGroupBox):
         self.setMovementParameters(self.speed_mode, self.velocity)
 
     def createNavigateXInButton(self):
-        left_button = QStyle.StandardPixmap.SP_ArrowLeft
-        icon = self.style().standardIcon(left_button)
+        # left_button = QStyle.StandardPixmap.SP_ArrowLeft
+        # icon = self.style().standardIcon(left_button)
+        icon = self.setIcon(QtGui.QIcon(":/icons/left-arrow.png"))
         self.navigate_x_in_btn = QPushButton()
         self.navigate_x_in_btn.setIcon(icon)
         self.navigate_x_in_btn.setStyleSheet('padding:10px')
@@ -399,8 +401,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_in_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateXOutButton(self):
-        right_button = QStyle.StandardPixmap.SP_ArrowRight
-        icon = self.style().standardIcon(right_button)
+        # right_button = QStyle.StandardPixmap.SP_ArrowRight
+        # icon = self.style().standardIcon(right_button)
+        icon = self.setIcon(QtGui.QIcon(":/icons/right-arrow.png"))
         self.navigate_x_out_btn = QPushButton()
         self.navigate_x_out_btn.setIcon(icon)
         self.navigate_x_out_btn.setStyleSheet('padding:10px')
@@ -410,8 +413,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_out_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateYForwardButton(self):
-        fwd_button = QStyle.StandardPixmap.SP_ArrowUp
-        icon = self.style().standardIcon(fwd_button)
+        # fwd_button = QStyle.StandardPixmap.SP_ArrowUp
+        # icon = self.style().standardIcon(fwd_button)
+        icon = self.setIcon(QtGui.QIcon(":/icons/up-arrow.png"))
         self.navigate_y_fwd_btn = QPushButton()
         self.navigate_y_fwd_btn.setIcon(icon)
         self.navigate_y_fwd_btn.setStyleSheet('padding:10px')
@@ -421,8 +425,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_fwd_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateYBackwardButton(self):
-        bwd_button = QStyle.StandardPixmap.SP_ArrowDown
-        icon = self.style().standardIcon(bwd_button)
+        # bwd_button = QStyle.StandardPixmap.SP_ArrowDown
+        # icon = self.style().standardIcon(bwd_button)
+        icon = self.setIcon(QtGui.QIcon(":/icons/down-arrow.png"))
         self.navigate_y_bwd_btn = QPushButton()
         self.navigate_y_bwd_btn.setIcon(icon)
         self.navigate_y_bwd_btn.setStyleSheet('padding:10px')
@@ -432,8 +437,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_bwd_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateZUpButton(self):
-        up_button = QStyle.StandardPixmap.SP_ArrowUp
-        icon = self.style().standardIcon(up_button)
+        # up_button = QStyle.StandardPixmap.SP_ArrowUp
+        # icon = self.style().standardIcon(up_button)
+        icon = self.setIcon(QtGui.QIcon(":/icons/up-arrow.png"))
         self.navigate_z_up_btn = QPushButton()
         self.navigate_z_up_btn.setIcon(icon)
         self.navigate_z_up_btn.setStyleSheet('padding:10px')
@@ -443,8 +449,9 @@ class NavigationPanel(QGroupBox):
         self.navigate_z_up_btn.released.connect(lambda: self.onRelease(ax))
 
     def createNavigateZDownButton(self):
-        down_button = QStyle.StandardPixmap.SP_ArrowDown
-        icon = self.style().standardIcon(down_button)
+        # down_button = QStyle.StandardPixmap.SP_ArrowDown
+        # icon = self.style().standardIcon(down_button)
+        icon = self.setIcon(QtGui.QIcon(":/icons/down-arrow.png"))
         self.navigate_z_down_btn = QPushButton()
         self.navigate_z_down_btn.setIcon(icon)
         self.navigate_z_down_btn.setStyleSheet('padding:10px')
