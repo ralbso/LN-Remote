@@ -9,7 +9,7 @@
         <file alias="down-arrow-green.png">../assets/icons/arrow-down-solid-green.png</file>
         <file alias="up-arrow-red.png">../assets/icons/arrow-up-solid-red.png</file>
         <file alias="down-arrow-red.png">../assets/icons/arrow-down-solid-red.png</file>
-        <file alias="left-arrow-yellow.png">../assets/icons/arrow-left-solid=yellow.png</file>
+        <file alias="left-arrow-yellow.png">../assets/icons/arrow-left-solid-yellow.png</file>
         <file alias="right-arrow-yellow.png">../assets/icons/arrow-right-solid-yellow.png</file>
     </qresource>
 </RCC>
