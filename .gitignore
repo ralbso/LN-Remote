@@ -2,5 +2,4 @@
 *.pyc
 config.ini
 .vscode/settings.json
-*.svg
 update_resources.bat
