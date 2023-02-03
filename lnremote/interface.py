@@ -54,9 +54,19 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def dataReadyCallback(self):
-        self.main_window.position_panel.read_x.setText(f'{self.acquisition_worker.data[0]:.2f}')
-        self.main_window.position_panel.read_y.setText(f'{self.acquisition_worker.data[1]:.2f}')
-        self.main_window.position_panel.read_z.setText(f'{self.acquisition_worker.data[2]:.2f}')
+        print('Updating position')
+        try:
+            # moving the update from the interface to the gui has provided some stability
+            self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
+            # self.main_window.position_panel.read_x.setText(f'{self.acquisition_worker.data[0]:.2f}')
+            # print('Set X')
+            # self.main_window.position_panel.read_y.setText(f'{self.acquisition_worker.data[1]:.2f}')
+            # print('Set Y')
+            # self.main_window.position_panel.read_z.setText(f'{self.acquisition_worker.data[2]:.2f}')
+            # print('Set Z')
+        except:
+            print('Hit a snag')
+            pass
         self.worker_wait_condition.wakeOne()
 
     def onExit(self):
@@ -82,7 +92,7 @@ class AcquisitionWorker(QObject):
             self.wait_condition.wait(self.mutex)
             self.mutex.unlock()
 
-            time.sleep(0.25)
+            time.sleep(0.1)
             self.data = self.manipulator.readManipulator([1, 2, 3])
             self.data_ready.emit()
 
