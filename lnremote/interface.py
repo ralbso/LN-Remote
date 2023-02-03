@@ -56,14 +56,7 @@ class Interface:
     def dataReadyCallback(self):
         print('Updating position')
         try:
-            # moving the update from the interface to the gui has provided some stability
             self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
-            # self.main_window.position_panel.read_x.setText(f'{self.acquisition_worker.data[0]:.2f}')
-            # print('Set X')
-            # self.main_window.position_panel.read_y.setText(f'{self.acquisition_worker.data[1]:.2f}')
-            # print('Set Y')
-            # self.main_window.position_panel.read_z.setText(f'{self.acquisition_worker.data[2]:.2f}')
-            # print('Set Z')
         except:
             print('Hit a snag')
             pass

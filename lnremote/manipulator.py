@@ -13,6 +13,8 @@ import struct
 import threading
 import time
 
+import select
+
 import numpy as np
 import serial
 import serial.tools.list_ports
@@ -44,6 +46,7 @@ class LuigsAndNeumannSM10:
         self._inside_brain = False
         self._timeout = None
         self._homed = False
+        self._socket_timeout = 0.5
 
         if self.CONNECTION == 'serial':
             self.io_lock = threading.Lock()
@@ -194,7 +197,12 @@ class LuigsAndNeumannSM10:
                 if resp_nbytes == 0:
                     ans = None
                 else:
-                    ans = s.recv(resp_nbytes)
+                    ready = select.select([s], [], [], self._socket_timeout)
+                    if ready[0]:
+                        ans = s.recv(resp_nbytes)
+                    else:
+                        print('Got hung-up reading manipulator')
+                        ans = None
 
         elif self.CONNECTION == 'dummy':
             ans = None
