@@ -54,7 +54,6 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def dataReadyCallback(self):
-        print('Updating position')
         try:
             self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
         except:
