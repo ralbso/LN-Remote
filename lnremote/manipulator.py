@@ -192,7 +192,14 @@ class LuigsAndNeumannSM10:
 
         elif self.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((self.IP, self.PORT))
+                try:
+                    s.connect((self.IP, self.PORT))
+                except TimeoutError:
+                    # if we can't communicate with the manipulator,
+                    # wait 100ms before attempting to connect again
+                    time.sleep(0.1)
+                    s.connect((self.IP, self.PORT))
+
                 s.sendall(self.bytes_command)
                 if resp_nbytes == 0:
                     ans = None
