@@ -581,6 +581,7 @@ class NavigationPanel(QGroupBox):
     def setMovementParameters(self, speed_mode, velocity):
         """Set the selected movement parameters for each axis
         """
+        print('Setting default movement parameters')
         for axis in range(1,4):
             self.manipulator.setMovementVelocity(axis, speed_mode, velocity)
 
