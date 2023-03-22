@@ -400,7 +400,6 @@ class NavigationPanel(QGroupBox):
         self.addToLayout(layout)
 
         self.toggleNavigation()
-        self.setMovementParameters(self.speed_mode, self.velocity)
 
     def styleLayout(self, layout):
         """Ensure that all columns have the same width
@@ -458,6 +457,8 @@ class NavigationPanel(QGroupBox):
             self.navigate_y_bwd_btn.setEnabled(True)
             self.navigate_z_up_btn.setEnabled(True)
             self.navigate_z_down_btn.setEnabled(True)
+
+            self.setMovementParameters(self.speed_mode, self.velocity)
         else:
             self.navigation_speed_dropdown.setEnabled(False)
             self.navigation_velocity_dropdown.setEnabled(False)

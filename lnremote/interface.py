@@ -8,7 +8,7 @@ Author: rmojica
 
 from config_loader import LoadConfig
 from gui import MainWindow
-from manipulator import LuigsAndNeumannSM10
+from devices import LuigsAndNeumannSM10
 
 import time
 from PySide6.QtCore import QMutex, QObject, QThread, QWaitCondition, Signal, Slot
@@ -16,6 +16,10 @@ from PySide6.QtWidgets import QApplication
 
 
 class Interface:
+    """The `Interface` class serves as the messenger between the GUI and the device. Through it,
+    we start the `QApplication` and initialize a worker thread (`AcquisitionWorker`) that
+    continuously updates the manipulator's current position.
+    """
 
     CONFIG = LoadConfig().Manipulator()
     IP = CONFIG['ip']
@@ -28,13 +32,13 @@ class Interface:
         self.gui = QApplication([])
 
         self.manipulator = LuigsAndNeumannSM10()
-        self.manipulator.initializeManipulator()
+        self.manipulator.checkDevice()
 
         self.main_window = MainWindow(interface=self)
 
         self.worker_wait_condition = QWaitCondition()
-        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition, 
-                                                    manipulator=self.manipulator)
+        self.acquisition_worker = AcquisitionWorker(
+            self.worker_wait_condition, manipulator=self.manipulator)
         self.acquisition_thread = QThread()
 
         self.acquisition_worker.moveToThread(self.acquisition_thread)
@@ -55,7 +59,8 @@ class Interface:
 
     def dataReadyCallback(self):
         try:
-            self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
+            self.main_window.position_panel.updatePositionBoxes(
+                self.acquisition_worker.data)
         except:
             print('Hit a snag')
             pass
@@ -65,6 +70,7 @@ class Interface:
         self.acquisition_thread.terminate()
         self.main_window.cells_panel.saveTableData()
         print('Closing GUI...')
+
 
 class AcquisitionWorker(QObject):
 
@@ -89,4 +95,3 @@ class AcquisitionWorker(QObject):
             self.data_ready.emit()
 
         self.finished.emit()
-    

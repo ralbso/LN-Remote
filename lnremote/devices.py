@@ -1,6 +1,6 @@
 """"""
 """
-File: d:/GitHub/raul-exps/LN-Remote/lnremote/manipulator.py
+File: d:/GitHub/raul-exps/LN-Remote/lnremote/devices.py
 
 Created on: 10/14/2022 14:56:24
 Author: rmojica
@@ -50,23 +50,32 @@ class LuigsAndNeumannSM10:
 
         if self.CONNECTION == 'serial':
             self.io_lock = threading.Lock()
-            self.manipulator = serial.Serial()
-            self.manipulator.baudrate = self.BAUDRATE
+            self.port = self.findManipulator(self.SERIAL)
+            self.ser = self.establishSerialConnection(
+                self.port, self.BAUDRATE, self._timeout, self.VERBOSE)
+            # self.ser = serial.Serial()
+            # self.ser.baudrate = self.BAUDRATE
 
     def __del__(self):
         try:
-            self.manipulator.close()
+            self.ser.close()
         except AttributeError:
             pass
         finally:
             print('Connection to SM10 closed.')
 
-    def initializeManipulator(self):
+    def checkDevice(self):
         # establish serial connection
         if self.CONNECTION == 'serial':
-            port = self.findManipulator(self.SERIAL)
-            self.manipulator = self.establishSerialConnection(
-                port, self._timeout, self.VERBOSE)
+            if self.VERBOSE:
+                print('Testing serial connection...')
+
+            self.port = self.findManipulator(self.SERIAL)
+
+            # self.ser = self.establishSerialConnection(
+            #     self.port, self.BAUDRATE, self._timeout, self.VERBOSE)
+
+            # self.ser.close()
 
         # establish ethernet connection
         elif self.CONNECTION == 'socket':
@@ -84,9 +93,10 @@ class LuigsAndNeumannSM10:
         elif self.CONNECTION == 'dummy':
             print('Initializing dummy manipulator...')
 
-    def clearBuffer(self):
-        self.manipulator.reset_input_buffer()
-        self.manipulator.reset_output_buffer()
+    @staticmethod
+    def clearBuffer(ser):
+        ser.reset_input_buffer()
+        ser.reset_output_buffer()
 
     @staticmethod
     def findManipulator(serial_number):
@@ -103,12 +113,12 @@ class LuigsAndNeumannSM10:
             raise IOError('Could not find manipulator... Is it connected?')
 
     @staticmethod
-    def establishSerialConnection(port, timeout, verbose):
+    def establishSerialConnection(port, baud, timeout, verbose):
         if verbose:
             print('Connecting...')
 
         ser = serial.Serial(port,
-                            baudrate=115200,
+                            baudrate=baud,
                             timeout=timeout,
                             write_timeout=2)
 
@@ -144,31 +154,37 @@ class LuigsAndNeumannSM10:
 
         if self.CONNECTION == 'serial':
             with self.io_lock:
+                # self.ser = self.establishSerialConnection(self.port, self.BAUDRATE, self._timeout, self.VERBOSE)
                 if resp_nbytes == 0:
-                    self.manipulator.write(self.bytes_command)
+                    if self.VERBOSE:
+                        print('No response expected')
+
+                    self.ser.write(self.bytes_command)
 
                     if self.VERBOSE:
                         print('Cmd sent')
                     self.clearBuffer()
 
-                    return None
+                    ans = None
 
                 else:
-                    self.manipulator.write(self.bytes_command)
+                    self.ser.write(self.bytes_command)
 
                     if self.VERBOSE:
                         print('Cmd sent')
 
-                    expected_response = binascii.unhexlify('06' + cmd_id)
                     time.sleep(0.01)
 
-                    ans = self.manipulator.read(resp_nbytes)
+                    ans = self.ser.read(size=resp_nbytes)
+
+                    if self.VERBOSE:
+                        print(f'Dev. resp: {ans}')
 
                     read_attempts = 0
                     while len(ans) < resp_nbytes:
                         if read_attempts >= 5:
-                            self.manipulator.write(self.bytes_command)
-                            ans = self.manipulator.read(resp_nbytes)
+                            self.ser.write(self.bytes_command)
+                            ans = self.ser.read(resp_nbytes)
 
                             if not len(ans) == resp_nbytes:
                                 msg = f'Could not get a response from manipulator for command {cmd_id}'
@@ -179,16 +195,11 @@ class LuigsAndNeumannSM10:
                         msg = f'Only received {len(ans)}/{resp_nbytes} bytes. Attempting to read again.'
                         print(msg)
 
-                        ans += self.manipulator.read(resp_nbytes - len(ans))
+                        ans += self.ser.read(resp_nbytes - len(ans))
                         read_attempts += 1
 
-                self.clearBuffer()
-
-                if ans[:len(expected_response)] != expected_response:
-                    e = f'Expected response to start with {binascii.hexlify(expected_response)},'\
-                        + f' but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
-                    print(e)
-                #     raise serial.SerialException(e)
+                self.clearBuffer(self.ser)
+                self.checkResponse(cmd_id, ans, self.VERBOSE)
 
         elif self.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -1237,6 +1248,19 @@ class LuigsAndNeumannSM10:
         elif ((1 not in axes) and (2 in axes) and (3 in axes)):
             YZ = [0, 0, 0, 0, 0, 0, 0, 0, 6]
             return YZ
+        
+    @staticmethod
+    def checkResponse(cmd_id, ans, verbose):
+        expected_response = binascii.unhexlify('06' + cmd_id)
+        if ans[:len(expected_response)] != expected_response:
+            e = f'Expected response to start with {binascii.hexlify(expected_response)},'\
+                + f' but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
+            print(e)
+        #     raise serial.SerialException(e)
+        else:
+            if verbose:
+                print('Expected response checks out')
+            pass
 
     # CRC Calculation
     @staticmethod
