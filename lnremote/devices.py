@@ -22,7 +22,7 @@ import serial.tools.list_ports
 from config_loader import LoadConfig
 
 
-class LuigsAndNeumannSM10:
+class LNSM10:
     """Represent Luigs and Neumann SM10 manipulator.\n
     To issue commands, the following general structure must be followed:\n
     `<SYN><CommandID><nFollowingBytes><Args><CRCMSB><CRCLSB>`
@@ -48,13 +48,13 @@ class LuigsAndNeumannSM10:
         self._homed = False
         self._socket_timeout = 0.5
 
-        if self.CONNECTION == 'serial':
+        if LNSM10.CONNECTION == 'serial':
             self.io_lock = threading.Lock()
-            self.port = self.findManipulator(self.SERIAL)
+            self.port = self.findManipulator(LNSM10.SERIAL)
             self.ser = self.establishSerialConnection(
-                self.port, self.BAUDRATE, self._timeout, self.VERBOSE)
+                self.port, LNSM10.BAUDRATE, self._timeout, LNSM10.VERBOSE)
             # self.ser = serial.Serial()
-            # self.ser.baudrate = self.BAUDRATE
+            # self.ser.baudrate = LNSM10.BAUDRATE
 
     def __del__(self):
         try:
@@ -66,31 +66,31 @@ class LuigsAndNeumannSM10:
 
     def checkDevice(self):
         # establish serial connection
-        if self.CONNECTION == 'serial':
-            if self.VERBOSE:
+        if LNSM10.CONNECTION == 'serial':
+            if LNSM10.VERBOSE:
                 print('Testing serial connection...')
 
-            self.port = self.findManipulator(self.SERIAL)
+            self.port = self.findManipulator(LNSM10.SERIAL)
 
             # self.ser = self.establishSerialConnection(
-            #     self.port, self.BAUDRATE, self._timeout, self.VERBOSE)
+            #     self.port, LNSM10.BAUDRATE, self._timeout, LNSM10.VERBOSE)
 
             # self.ser.close()
 
         # establish ethernet connection
-        elif self.CONNECTION == 'socket':
+        elif LNSM10.CONNECTION == 'socket':
             print('Testing ethernet connection...')
             s = socket.socket()
             try:
-                s.connect((self.IP, self.PORT))
+                s.connect((LNSM10.IP, LNSM10.PORT))
             except Exception as e:
                 print(
-                    f'Could not establish connection to IP {self.IP} and port {self.PORT}.\n{e}'
+                    f'Could not establish connection to IP {LNSM10.IP} and port {LNSM10.PORT}.\n{e}'
                 )
             finally:
                 s.close()
 
-        elif self.CONNECTION == 'dummy':
+        elif LNSM10.CONNECTION == 'dummy':
             print('Initializing dummy manipulator...')
 
     @staticmethod
@@ -132,7 +132,7 @@ class LuigsAndNeumannSM10:
         # calculate CRC for command parameters
         (MSB, LSB) = self.crc16(data)
 
-        # if self.VERBOSE:
+        # if LNSM10.VERBOSE:
         #     print(data_n_bytes, len(data), data)
 
         if data_n_bytes != len(data):
@@ -140,7 +140,7 @@ class LuigsAndNeumannSM10:
                 'The number of bytes sent does not match the data array.')
 
         # compile full command string
-        command = self.SYN + cmd_id + '%0.2X' % data_n_bytes
+        command = LNSM10.SYN + cmd_id + '%0.2X' % data_n_bytes
         for i in range(len(data)):
             command += '%0.2X' % data[i]
         command += '%0.2X%0.2X' % (MSB, LSB)
@@ -148,20 +148,20 @@ class LuigsAndNeumannSM10:
         # convert command to bytes for COM interface
         self.bytes_command = binascii.unhexlify(command)
 
-        if self.VERBOSE:
+        if LNSM10.VERBOSE:
             print('Cmd:', cmd_id, command)
             print('Raw cmd:', self.bytes_command)
 
-        if self.CONNECTION == 'serial':
+        if LNSM10.CONNECTION == 'serial':
             with self.io_lock:
-                # self.ser = self.establishSerialConnection(self.port, self.BAUDRATE, self._timeout, self.VERBOSE)
+                # self.ser = self.establishSerialConnection(self.port, LNSM10.BAUDRATE, self._timeout, LNSM10.VERBOSE)
                 if resp_nbytes == 0:
-                    if self.VERBOSE:
+                    if LNSM10.VERBOSE:
                         print('No response expected')
 
                     self.ser.write(self.bytes_command)
 
-                    if self.VERBOSE:
+                    if LNSM10.VERBOSE:
                         print('Cmd sent')
                     self.clearBuffer()
 
@@ -170,14 +170,14 @@ class LuigsAndNeumannSM10:
                 else:
                     self.ser.write(self.bytes_command)
 
-                    if self.VERBOSE:
+                    if LNSM10.VERBOSE:
                         print('Cmd sent')
 
                     time.sleep(0.01)
 
                     ans = self.ser.read(size=resp_nbytes)
 
-                    if self.VERBOSE:
+                    if LNSM10.VERBOSE:
                         print(f'Dev. resp: {ans}')
 
                     read_attempts = 0
@@ -199,17 +199,17 @@ class LuigsAndNeumannSM10:
                         read_attempts += 1
 
                 self.clearBuffer(self.ser)
-                self.checkResponse(cmd_id, ans, self.VERBOSE)
+                self.checkResponse(cmd_id, ans, LNSM10.VERBOSE)
 
-        elif self.CONNECTION == 'socket':
+        elif LNSM10.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 try:
-                    s.connect((self.IP, self.PORT))
+                    s.connect((LNSM10.IP, LNSM10.PORT))
                 except TimeoutError:
                     # if we can't communicate with the manipulator,
                     # wait 100ms before attempting to connect again
                     time.sleep(0.1)
-                    s.connect((self.IP, self.PORT))
+                    s.connect((LNSM10.IP, LNSM10.PORT))
 
                 s.sendall(self.bytes_command)
                 if resp_nbytes == 0:
@@ -222,11 +222,11 @@ class LuigsAndNeumannSM10:
                         print('Got hung-up reading manipulator')
                         ans = None
 
-        elif self.CONNECTION == 'dummy':
+        elif LNSM10.CONNECTION == 'dummy':
             ans = None
             print(command)
 
-        if self.VERBOSE:
+        if LNSM10.VERBOSE:
             print('Raw response:', ans)
 
         return ans
