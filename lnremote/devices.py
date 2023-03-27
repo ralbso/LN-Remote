@@ -43,7 +43,6 @@ class LNSM10:
 
     def __init__(self):
         super().__init__()
-        self.verbose = LuigsAndNeumannSM10.VERBOSE
         self._inside_brain = False
         self._timeout = None
         self._homed = False
