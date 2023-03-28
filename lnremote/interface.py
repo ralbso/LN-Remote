@@ -5,15 +5,37 @@ File: d:/GitHub/LN-Remote/lnremote/interface.py
 Created on: 01/17/2023 14:27:00
 Author: rmojica
 """
+import logging
+import sys
 
 from config_loader import LoadConfig
 from gui import MainWindow
-from devices import LuigsAndNeumannSM10
+from devices import LNSM10
 
 import time
 from PySide6.QtCore import QMutex, QObject, QThread, QWaitCondition, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
+# create logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# create formatter
+stream_format = logging.Formatter('[%(asctime)s] %(name)s %(lineno)-3d :: %(levelname)-8s - %(message)s')
+
+# create console handler and set level to debug
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setLevel(logging.DEBUG)
+stream_handler.setFormatter(stream_format)
+
+# create file handler and set level to debug
+file_handler = logging.RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(stream_format)
+
+# add handlers to logger
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 
 class Interface:
     """The `Interface` class serves as the messenger between the GUI and the device. Through it,
@@ -31,7 +53,7 @@ class Interface:
     def __init__(self):
         self.gui = QApplication([])
 
-        self.manipulator = LuigsAndNeumannSM10()
+        self.manipulator = LNSM10()
         self.manipulator.checkDevice()
 
         self.main_window = MainWindow(interface=self)
@@ -61,15 +83,18 @@ class Interface:
         try:
             self.main_window.position_panel.updatePositionBoxes(
                 self.acquisition_worker.data)
-        except:
-            print('Hit a snag')
+            logger.debug(self.acquisition_worker.data)
+        except Exception as e:
+            logger.error(f'Hit a snag: {e}')
+            logger.error(f'Last read data: {self.acquisition_worker.data}')
             pass
-        self.worker_wait_condition.wakeOne()
+        finally:
+            self.worker_wait_condition.wakeOne()
 
     def onExit(self):
         self.acquisition_thread.terminate()
         self.main_window.cells_panel.saveTableData()
-        print('Closing GUI...')
+        logger.info('Closing GUI...')
 
 
 class AcquisitionWorker(QObject):
@@ -82,6 +107,10 @@ class AcquisitionWorker(QObject):
         self.wait_condition = wait_condition
         self.manipulator = manipulator
         self.mutex = QMutex()
+
+    def __del__(self):
+        # adding method somehow reduces the chance of a crash
+        logger.info('AcquisitionWorker deleted')
 
     @Slot()
     def run(self):

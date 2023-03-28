@@ -13,6 +13,9 @@ import struct
 import threading
 import time
 
+import logging
+import sys
+
 import select
 
 import numpy as np
@@ -20,6 +23,27 @@ import serial
 import serial.tools.list_ports
 
 from config_loader import LoadConfig
+
+# create logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# create formatter
+stream_format = logging.Formatter('[%(asctime)s] %(name)s %(lineno)-3d :: %(levelname)-8s - %(message)s')
+
+# create console handler and set level to debug
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setLevel(logging.DEBUG)
+stream_handler.setFormatter(stream_format)
+
+# create file handler and set level to debug
+file_handler = logging.FileHandler('interface.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(stream_format)
+
+# add handlers to logger
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 
 
 class LNSM10:
@@ -34,7 +58,7 @@ class LNSM10:
     ACK = '06'  # ACK character
 
     CONFIG = LoadConfig().Manipulator()
-    VERBOSE = CONFIG['debug'] == 'True'
+    # VERBOSE = CONFIG['debug'] == 'True'
     IP = CONFIG['ip']
     PORT = int(CONFIG['port'])
     SERIAL = CONFIG['serial']
@@ -42,19 +66,17 @@ class LNSM10:
     CONNECTION = CONFIG['connection'].lower()
 
     def __init__(self):
-        super().__init__()
         self._inside_brain = False
         self._timeout = None
         self._homed = False
         self._socket_timeout = 0.5
 
         if LNSM10.CONNECTION == 'serial':
+            logger.info('Establishing serial connection...')
             self.io_lock = threading.Lock()
             self.port = self.findManipulator(LNSM10.SERIAL)
             self.ser = self.establishSerialConnection(
                 self.port, LNSM10.BAUDRATE, self._timeout, LNSM10.VERBOSE)
-            # self.ser = serial.Serial()
-            # self.ser.baudrate = LNSM10.BAUDRATE
 
     def __del__(self):
         try:
@@ -62,36 +84,27 @@ class LNSM10:
         except AttributeError:
             pass
         finally:
-            print('Connection to SM10 closed.')
+            logger.info('Connection to SM10 closed.')
+
+    def __repr__(self):
+        return f'Luigs and Neumann SM10 manipulator'
 
     def checkDevice(self):
-        # establish serial connection
-        if LNSM10.CONNECTION == 'serial':
-            if LNSM10.VERBOSE:
-                print('Testing serial connection...')
-
-            self.port = self.findManipulator(LNSM10.SERIAL)
-
-            # self.ser = self.establishSerialConnection(
-            #     self.port, LNSM10.BAUDRATE, self._timeout, LNSM10.VERBOSE)
-
-            # self.ser.close()
-
-        # establish ethernet connection
-        elif LNSM10.CONNECTION == 'socket':
-            print('Testing ethernet connection...')
+        # check ethernet connection
+        if LNSM10.CONNECTION == 'socket':
+            logger.info('Testing ethernet connection...')
             s = socket.socket()
             try:
                 s.connect((LNSM10.IP, LNSM10.PORT))
             except Exception as e:
-                print(
+                logger.error(
                     f'Could not establish connection to IP {LNSM10.IP} and port {LNSM10.PORT}.\n{e}'
                 )
             finally:
                 s.close()
 
         elif LNSM10.CONNECTION == 'dummy':
-            print('Initializing dummy manipulator...')
+            logger.info('Initializing dummy manipulator...')
 
     @staticmethod
     def clearBuffer(ser):
@@ -100,7 +113,25 @@ class LNSM10:
 
     @staticmethod
     def findManipulator(serial_number):
+        """Find the manipulator connected to the computer with the given serial number.
+
+        Parameters
+        ----------
+        serial_number : str
+            Alphanumeric serial number of the manipulator.
+
+        Returns
+        -------
+        str
+            Port where the manipulator is connected.
+
+        Raises
+        ------
+        IOError
+            If the manipulator is not connected to the computer, an error is raised.
+        """
         comports = serial.tools.list_ports.comports()
+        correct_device = None
         try:
             for comport in comports:
                 # make sure the comport is real
@@ -108,36 +139,90 @@ class LNSM10:
                 device = str(comport.device)
 
                 if ser == serial_number:
-                    return device
-        except Exception:
-            raise IOError('Could not find manipulator... Is it connected?')
+                    correct_device = device
+                    break
+
+            if correct_device == None:
+                raise IOError('Could not find manipulator... Is it connected?')
+                
+            return correct_device
+
+        except IOError as e:
+            logger.error(str(e))
 
     @staticmethod
-    def establishSerialConnection(port, baud, timeout, verbose):
-        if verbose:
-            print('Connecting...')
+    def establishSerialConnection(port, baud, timeout):
+        """Establish serial connection with the manipulator.
+
+        Parameters
+        ----------
+        port : str
+            Port where the manipulator is connected.
+        baud : int
+            Baud rate of serial connection.
+        timeout : float
+            Time to wait for a response from the manipulator.
+
+        Returns
+        -------
+        serial.Serial
+            Serial object to communicate with the manipulator.
+        """
+        logger.info('Connecting...')
 
         ser = serial.Serial(port,
                             baudrate=baud,
                             timeout=timeout,
                             write_timeout=2)
 
-        if verbose:
-            print(f'Connected to SM10 on {port}.')
+        logger.info(f'Connected to SM10 on {port}.')
+
         return ser
 
     # SEND COMMANDS
     def sendCommand(self, cmd_id, data_n_bytes, data, resp_nbytes=0):
+        """The heart of the communication protocol.
+        This method sends a command to the manipulator, waits for a response and returns it raw.
+        The initiator of `sendCommand` is responsible for interpreting the response.
+
+        Parameters
+        ----------
+        cmd_id : str
+            Command identifier, as defined in the LN SM10 serial protocol manual.
+        data_n_bytes : int
+            Number of bytes to be sent.
+        data : list
+            Arguments to be sent with the command.
+        resp_nbytes : int, optional
+            Expected response size, in bytes, by default 0
+
+        Returns
+        -------
+        str
+            Raw response from the manipulator, to be decoded downstream.
+
+        Raises
+        ------
+        IndexError
+            Raised if the number of bytes sent does not match the data array.
+        serial.SerialException
+            Raised if, after attempting to read the manipulator's response buffer five times, the
+            response is not read comletely.
+        """
 
         # calculate CRC for command parameters
         (MSB, LSB) = self.crc16(data)
 
-        # if LNSM10.VERBOSE:
-        #     print(data_n_bytes, len(data), data)
+        logger.debug(data_n_bytes, len(data), data)
 
-        if data_n_bytes != len(data):
-            raise IndexError(
-                'The number of bytes sent does not match the data array.')
+        try:
+            if data_n_bytes != len(data):
+                raise IndexError(
+                    'The number of bytes sent does not match the data array.')
+        except IndexError as e:
+            logger.error(str(e))
+            raise
+
 
         # compile full command string
         command = LNSM10.SYN + cmd_id + '%0.2X' % data_n_bytes
@@ -146,60 +231,59 @@ class LNSM10:
         command += '%0.2X%0.2X' % (MSB, LSB)
 
         # convert command to bytes for COM interface
-        self.bytes_command = binascii.unhexlify(command)
+        bytes_command = binascii.unhexlify(command)
 
-        if LNSM10.VERBOSE:
-            print('Cmd:', cmd_id, command)
-            print('Raw cmd:', self.bytes_command)
+        logger.debug('Cmd:', cmd_id, command)
+        logger.debug('Raw cmd:', bytes_command)
 
+        ans = None # assign ans to None to avoid UnboundLocalError
         if LNSM10.CONNECTION == 'serial':
             with self.io_lock:
-                # self.ser = self.establishSerialConnection(self.port, LNSM10.BAUDRATE, self._timeout, LNSM10.VERBOSE)
                 if resp_nbytes == 0:
-                    if LNSM10.VERBOSE:
-                        print('No response expected')
+                    logger.debug('No response expected')
 
-                    self.ser.write(self.bytes_command)
+                    self.ser.write(bytes_command)
 
-                    if LNSM10.VERBOSE:
-                        print('Cmd sent')
+                    logger.debug('Cmd sent')
                     self.clearBuffer()
 
                     ans = None
 
                 else:
-                    self.ser.write(self.bytes_command)
+                    self.ser.write(bytes_command)
 
-                    if LNSM10.VERBOSE:
-                        print('Cmd sent')
+                    logger.debug('Cmd sent')
 
                     time.sleep(0.01)
 
                     ans = self.ser.read(size=resp_nbytes)
 
-                    if LNSM10.VERBOSE:
-                        print(f'Dev. resp: {ans}')
+                    logger.debug(f'Dev. resp: {ans}')
 
                     read_attempts = 0
                     while len(ans) < resp_nbytes:
                         if read_attempts >= 5:
-                            self.ser.write(self.bytes_command)
+                            self.ser.write(bytes_command)
                             ans = self.ser.read(resp_nbytes)
 
-                            if not len(ans) == resp_nbytes:
-                                msg = f'Could not get a response from manipulator for command {cmd_id}'
-                                raise serial.SerialException(msg)
-                            else:
-                                break
-                        
+                            try:
+                                if not len(ans) == resp_nbytes:
+                                    msg = f'Could not get a response from manipulator for command {cmd_id}'
+                                    raise serial.SerialException(msg)
+                                else:
+                                    break
+                            except serial.SerialException as e:
+                                logger.error(str(e))
+                                raise
+                            
                         msg = f'Only received {len(ans)}/{resp_nbytes} bytes. Attempting to read again.'
-                        print(msg)
+                        logger.debug(msg)
 
                         ans += self.ser.read(resp_nbytes - len(ans))
                         read_attempts += 1
 
-                self.clearBuffer(self.ser)
-                self.checkResponse(cmd_id, ans, LNSM10.VERBOSE)
+                self.clearBuffer(self.ser)       # clear serial buffer
+                self.checkResponse(cmd_id, ans)  # check manipulator response for errors
 
         elif LNSM10.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -208,10 +292,11 @@ class LNSM10:
                 except TimeoutError:
                     # if we can't communicate with the manipulator,
                     # wait 100ms before attempting to connect again
+                    logger.error("Couldn't connect to manipulator. Retrying...")
                     time.sleep(0.1)
                     s.connect((LNSM10.IP, LNSM10.PORT))
 
-                s.sendall(self.bytes_command)
+                s.sendall(bytes_command)
                 if resp_nbytes == 0:
                     ans = None
                 else:
@@ -219,15 +304,14 @@ class LNSM10:
                     if ready[0]:
                         ans = s.recv(resp_nbytes)
                     else:
-                        print('Got hung-up reading manipulator')
+                        logger.error('Got hung-up reading manipulator')
                         ans = None
 
         elif LNSM10.CONNECTION == 'dummy':
             ans = None
-            print(command)
+            logger.debug(command)
 
-        if LNSM10.VERBOSE:
-            print('Raw response:', ans)
+        logger.debug('Raw response:', ans)
 
         return ans
 
@@ -241,6 +325,8 @@ class LNSM10:
             Axis selection
         steps : int
             Number of steps to travel
+        resolution : int
+            Single step resolution
         """
         assert (steps > -127 and steps < 127)
 
@@ -251,6 +337,8 @@ class LNSM10:
         nbytes = 1
         data = ([axis, mapped_steps])
         resp_nbytes = 4
+
+        logger.debug(f'Stepping axis {axis} by {steps} steps at {resolution} um/step')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setStepResolution(self, axis, resolution):
@@ -268,6 +356,8 @@ class LNSM10:
         nbytes = 1
         data = ([axis, resolution])
         resp_nbytes = 4
+
+        logger.debug(f'Setting step resolution of axis {axis} to {resolution} um/step')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def singleStep(self, axis, direction, increment=None, velocity=None):
@@ -300,6 +390,8 @@ class LNSM10:
         nbytes = 1
         data = ([axis])
         resp_nbytes = 4
+
+        logger.debug(f'Stepping axis {axis} in direction {direction}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setStepDistance(self, axis, increment):
@@ -316,6 +408,8 @@ class LNSM10:
         nbytes = 5
         data = ([axis] + list(increment))
         resp_nbytes = 0
+
+        logger.debug(f'Setting step distance of axis {axis} to {increment} um')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setStepVelocity(self, axis, velocity):
@@ -333,6 +427,8 @@ class LNSM10:
         nbytes = 2
         data = ([axis, velocity])
         resp_nbytes = 0
+
+        logger.debug(f'Setting step velocity of axis {axis} to {velocity} A.U.')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def moveAxis(self, axis, speed_mode, direction, velocity=None):
@@ -369,6 +465,8 @@ class LNSM10:
         nbytes = 1
         data = ([axis])
         response_n_bytes = 4
+
+        logger.debug(f'Moving axis {axis} in direction {direction} at speed mode {speed_mode} and velocity {velocity} A.U.')
         self.sendCommand(cmd_id, nbytes, data, response_n_bytes)
 
     def setMovementVelocity(self, axis, speed_mode, velocity):
@@ -392,6 +490,8 @@ class LNSM10:
         nbytes = 2
         data = ([axis, velocity])
         resp_nbytes = 4
+
+        logger.debug(f'Setting movement velocity of axis {axis} to speed mode {speed_mode} and {velocity} A.U.')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def approachPosition(self, axis, approach_mode, position, speed_mode):
@@ -429,6 +529,12 @@ class LNSM10:
         nbytes = 5
         data = ([axis] + list(self.convertToFloatBytes(position)))
         resp_nbytes = 4
+
+        if approach_mode == 0:
+            logger.debug(f'Approaching axis {axis} to absolute position {position} um in speed mode {speed_mode}')
+        elif approach_mode == 1:
+            logger.debug(f'Approaching axis {axis} to relative position {position} um in speed mode {speed_mode}')
+
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setPositioningSpeedMode(self, axis, speed_mode=0):
@@ -443,6 +549,8 @@ class LNSM10:
         nbytes = 2
         data = (axis + [speed_mode])
         resp_nbytes = 4
+
+        logger.debug(f'Setting positioning speed mode for axis {axis} to {speed_mode}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setPositioningVelocity(self, axis, speed_mode, velocity):
@@ -468,6 +576,8 @@ class LNSM10:
         nbytes = 2
         data = (axis + [velocity])
         resp_nbytes = 4
+
+        logger.debug(f'Setting positioning velocity for axis {axis} to speed mode {speed_mode} with velocity {velocity} A.U.')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setPositioningVelocityLinear(self, axis, speed_mode, velocity):
@@ -497,6 +607,12 @@ class LNSM10:
         nbytes = 3
         data = ([axis] + velocity)
         resp_nbytes = 4
+
+        if speed_mode == 0:
+            logger.debug(f'Setting linear positioning velocity for axis {axis} to speed mode {speed_mode} with velocity {velocity} micro-steps per second')
+        elif speed_mode == 1:
+            logger.debug(f'Setting linear positioning velocity for axis {axis} to speed mode {speed_mode} with velocity {velocity} steps per second')
+
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def storePosition(self, axis, slot_number):
@@ -515,6 +631,8 @@ class LNSM10:
         nbytes = 2
         data = ([axis, slot_number])
         resp_nbytes = 4
+
+        logger.debug(f'Storing axis {axis} position in slot {slot_number}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def goToStoredPosition(self, axis, slot_number):
@@ -533,6 +651,8 @@ class LNSM10:
         nbytes = 2
         data = ([axis, slot_number])
         resp_nbytes = 4
+
+        logger.debug(f'Going to axis {axis} stored position in slot {slot_number}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def switchAxisPower(self, axis, power):
@@ -554,6 +674,8 @@ class LNSM10:
 
         data = ([axis])
         resp_nbytes = 4
+
+        logger.debug(f'Switching axis {axis} power to {power}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def moveHome(self, axis, velocity=None, direction=None):
@@ -583,6 +705,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Moving axis {axis} to home position at velocity {velocity} and direction {direction}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
         self.homed = True
 
@@ -603,6 +726,7 @@ class LNSM10:
         data = ([axis, velocity])
         resp_nbytes = 4
 
+        logger.debug(f'Setting homing velocity for axis {axis} to {velocity}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setHomeDirection(self, axis, direction):
@@ -622,6 +746,7 @@ class LNSM10:
         data = ([axis, direction])
         resp_nbytes = 4
 
+        logger.debug(f'Setting home direction for axis {axis} to {direction}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def returnAxisHome(self, axis):
@@ -640,10 +765,11 @@ class LNSM10:
         resp_nbytes = 4
 
         if self._homed:
+            logger.debug(f'Returning axis {axis} to home position')
             self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
             self._homed = False  # prevent accidentally homing to arbitrary coordinates
         else:
-            print(
+            logger.warning(
                 'Home command has not been executed. Could not return axis home.'
             )
 
@@ -661,6 +787,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Aborting home for axis {axis}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def resetZero(self, axis):
@@ -678,6 +805,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Resetting axis {axis} main counter to 0')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def resetZero2(self, axis):
@@ -696,6 +824,7 @@ class LNSM10:
         data = ([axis, counter])
         resp_nbytes = 4
 
+        logger.debug(f'Resetting axis {axis} secondary counter to 0')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def moveaxisToZero(self, axis):
@@ -713,6 +842,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Moving axis {axis} to 0')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def stopMovement(self, axis):
@@ -730,6 +860,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Stopping axis {axis} movement')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def switchSlowRamp(self, axis, switch=1):
@@ -752,6 +883,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Switching slow ramp for axis {axis} to {switch}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     def setRampLength(self, axis, length):
@@ -771,6 +903,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 4
 
+        logger.debug(f'Setting ramp length for axis {axis} to {length}')
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
     # QUERIES
@@ -794,6 +927,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 8
 
+        logger.debug(f'Reading main position counter for axis {axis}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
         return struct.unpack('f', ans[4:8])[0]
 
@@ -817,6 +951,7 @@ class LNSM10:
         data = ([axis])
         resp_nbytes = 8
 
+        logger.debug(f'Reading secondary position counter for axis {axis}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
         return struct.unpack('f', ans[4:8])[0]
 
@@ -838,6 +973,8 @@ class LNSM10:
         nbytes = 1
         data = ([axis])
         resp_nbytes = 5
+
+        logger.debug(f'Reading speed mode for axis {axis}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
         return struct.unpack('i', ans[4:6])[0]
 
@@ -865,7 +1002,8 @@ class LNSM10:
         group_flag = 0xA0
         data = ([group_flag] + group)
 
-        self.sendCommand(cmd_id, bytes, data)
+        logger.debug(f'Switching power for axes {axes} to {power}')
+        self.sendCommand(cmd_id, nbytes, data)
 
     def resetAxesZero(self, axes):
         """Reset grouped axes' location counter to 0.
@@ -882,6 +1020,7 @@ class LNSM10:
         group_flag = 0xA0
         data = ([group_flag] + group)
 
+        logger.debug(f'Resetting main location counter for axes {axes} to 0')
         self.sendCommand(cmd_id, nbytes, data)
 
     def resetAxesZero2(self, axes):
@@ -899,6 +1038,7 @@ class LNSM10:
         group_flag = 0xA0
         data = ([group_flag] + group)
 
+        logger.debug(f'Resetting secondary location counter for axes {axes} to 0')
         self.sendCommand(cmd_id, nbytes, data)
 
     # def moveAxes(self, axes, direction, speed_mode, velocity):
@@ -948,6 +1088,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group)
+
+        logger.debug(f'Stopping axes {axes}')
         self.sendCommand(cmd_id, nbytes, data)
 
     def moveAxesToZero(self, axes, velocity):
@@ -968,6 +1110,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group + [velocity])
+
+        logger.debug(f'Moving axes {axes} to zero at velocity {velocity}')
         self.sendCommand(cmd_id, nbytes, data)
 
     def storeAxesPosition(self, axes, slot_number):
@@ -988,6 +1132,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group + [slot_number])
+
+        logger.debug(f'Storing axes {axes} position in slot {slot_number}')
         self.sendCommand(cmd_id, nbytes, data)
 
     def approachStoredAxesPosition(self, axes, slot_number, velocity):
@@ -1012,6 +1158,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group + [slot_number, velocity])
+
+        logger.debug(f'Approaching stored position {slot_number} for axes {axes} at velocity {velocity}')
         self.sendCommand(cmd_id, nbytes, data)
 
     def stepAxes(self, axes, direction, velocity, distance):
@@ -1040,6 +1188,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group + [velocity, distance])
+
+        logger.debug(f'Stepping axes {axes} in direction {direction} at velocity {velocity} and distance {distance}')
         self.sendCommand(cmd_id, nbytes, data)
 
     def moveAxesHome(self, axes, velocity, direction=None):
@@ -1063,6 +1213,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group + [velocity])
+
+        logger.debug(f'Moving axes {axes} away from home at velocity {velocity}')
         self.sendCommand(cmd_id, nbytes, data)
         self._homed = True
 
@@ -1085,10 +1237,11 @@ class LNSM10:
 
         data = ([group_flag] + group + [velocity])
         if self._homed:
+            logger.debug(f'Returning axes {axes} home at velocity {velocity}')
             self.sendCommand(cmd_id, nbytes, data)
             self._homed = False  # prevent accidentally homing to arbitrary coordinates
         else:
-            print(
+            logger.warning(
                 'Home command has not been executed. Could not return axis home.'
             )
 
@@ -1106,6 +1259,8 @@ class LNSM10:
         group_flag = 0xA0
 
         data = ([group_flag] + group)
+
+        logger.debug(f'Aborting home for axes {axes}')
         self.sendCommand(cmd_id, nbytes, data)
 
     # GROUP COMMANDS
@@ -1148,6 +1303,7 @@ class LNSM10:
         group_flag = 0xA0
         data = ([group_flag] + adr + pos)
 
+        logger.debug(f'Approaching position {positions} for axes {axes} in mode {approach_mode}')
         self.sendCommand(cmd_id, nbytes, data)
 
     # GROUP QUERIES
@@ -1164,6 +1320,7 @@ class LNSM10:
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
 
+        logger.debug(f'Reading main manipulator position for axes {axes}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
@@ -1174,7 +1331,8 @@ class LNSM10:
                 struct.unpack('f', ans[20:24])[0]
             ]
             return ans_decoded
-        except:
+        except Exception as e:
+            logger.error(str(e))
             pass
 
     def readManipulator2(self, axes):
@@ -1190,6 +1348,7 @@ class LNSM10:
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
 
+        logger.debug(f'Reading secondary manipulator position for axes {axes}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
@@ -1200,7 +1359,8 @@ class LNSM10:
                 struct.unpack('f', ans[20:24])[0]
             ]
             return ans_decoded
-        except:
+        except Exception as e:
+            logger.error(str(e))
             pass
 
     def queryAxesState(self, axes):
@@ -1213,8 +1373,10 @@ class LNSM10:
         resp_nbytes = 14
 
         data = ([group_flag] + adr)
+
+        logger.debug(f'Querying axes state for axes {axes}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
-        print(ans)
+        # print(ans)
         # try:
         #     ans_decoded = [[struct.unpack('i', ans[8:12])[0],
         #                     struct.unpack('i', ans[12:16])[0],
@@ -1250,17 +1412,15 @@ class LNSM10:
             return YZ
         
     @staticmethod
-    def checkResponse(cmd_id, ans, verbose):
+    def checkResponse(cmd_id, ans):
         expected_response = binascii.unhexlify('06' + cmd_id)
-        if ans[:len(expected_response)] != expected_response:
+        if ans[:len(expected_response)] == expected_response:
+            logger.debug('Expected response checks out')
+            pass
+        else:
             e = f'Expected response to start with {binascii.hexlify(expected_response)},'\
                 + f' but got {binascii.hexlify(ans[:len(expected_response)])} instead.'
-            print(e)
-        #     raise serial.SerialException(e)
-        else:
-            if verbose:
-                print('Expected response checks out')
-            pass
+            logger.info(e)
 
     # CRC Calculation
     @staticmethod
