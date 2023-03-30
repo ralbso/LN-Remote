@@ -39,7 +39,7 @@ stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
 file_handler = RotatingFileHandler('interface.log', maxBytes=int(1.024e6), backupCount=3)
-file_handler.setLevel(logging.INFO)
+file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(stream_format)
 
 # add handlers to logger
@@ -296,7 +296,7 @@ class LNSM10:
                         # if we can't communicate with the manipulator,
                         # wait 100ms before attempting to connect again
                         logger.error(f"Couldn't connect to manipulator - {e}.")
-                        time.sleep(0.1)
+                        time.sleep(0.5)
                         logger.info('Retrying...')
                     else:
                         break
