@@ -44,7 +44,7 @@ stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
 file_handler = RotatingFileHandler('interface.log', maxBytes=int(1.024e6), backupCount=3)
-file_handler.setLevel(logging.INFO)
+file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(stream_format)
 
 # add handlers to logger
@@ -673,9 +673,9 @@ class ControlsPanel(QGroupBox):
     def createExitBrainButton(self):
         """Create exit brain button
         """
-        self.exit_brain_btn = QPushButton('Exit Tissue')
+        self.exit_brain_btn = QPushButton('Retract')
         self.exit_brain_btn.setStyleSheet('padding:15px')
-        self.exit_brain_btn.setToolTip('Slowly exit tissue to 100 um')
+        self.exit_brain_btn.setToolTip('Slowly retract to 100 um')
         self.exit_brain_btn.clicked.connect(self.exitBrain)
 
     def createMoveAwayButton(self):
@@ -727,7 +727,8 @@ class ControlsPanel(QGroupBox):
             if result == 524288:
                 self.exitBrain()  # first exit brain
                 time.sleep(1)
-                self.manipulator.approachAxesPosition(axes=[2, 3],
+                if not self.inBrain():
+                    self.manipulator.approachAxesPosition(axes=[2, 3],
                                                       approach_mode=0,
                                                       positions=[-26000, 26000],
                                                       speed_mode=1)
