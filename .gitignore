@@ -4,4 +4,4 @@ config.ini
 .vscode/settings.json
 update_resources.bat
 start_manipulator_gui.bat
-*.log
+*.log*
