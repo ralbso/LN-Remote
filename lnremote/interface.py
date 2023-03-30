@@ -30,7 +30,7 @@ stream_handler.setLevel(logging.DEBUG)
 stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
-file_handler = RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
+file_handler = RotatingFileHandler('interface.log', maxBytes=int(1.024e6), backupCount=3)
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(stream_format)
 
@@ -96,12 +96,17 @@ class Interface:
             self.worker_wait_condition.wakeOne()
 
     def onExit(self):
+        self.acquisition_worker.stop()
         self.acquisition_thread.terminate()
         self.main_window.cells_panel.saveTableData()
         logger.info('Closing GUI...')
 
 
 class AcquisitionWorker(QObject):
+    """The `AcquisitionWorker` class serves as a worker thread for the `Interface` class. It
+    continuously reads the manipulator's current position and emits a signal when new data is
+    available.
+    """
 
     finished = Signal()
     data_ready = Signal()
@@ -112,13 +117,15 @@ class AcquisitionWorker(QObject):
         self.manipulator = manipulator
         self.mutex = QMutex()
 
+        self.keep_running = True
+
     def __del__(self):
-        # adding method somehow reduces the chance of a crash
+        # adding method somehow reduces the chances of a crash
         logger.info('AcquisitionWorker deleted')
 
     @Slot()
     def run(self):
-        while True:
+        while self.keep_running:
             self.mutex.lock()
             self.wait_condition.wait(self.mutex)
             self.mutex.unlock()
@@ -128,3 +135,6 @@ class AcquisitionWorker(QObject):
             self.data_ready.emit()
 
         self.finished.emit()
+
+    def stop(self):
+        self.keep_running = False
