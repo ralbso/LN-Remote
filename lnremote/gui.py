@@ -43,7 +43,7 @@ stream_handler.setLevel(logging.DEBUG)
 stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
-file_handler = RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
+file_handler = RotatingFileHandler('interface.log', maxBytes=int(1.024e6), backupCount=3)
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(stream_format)
 
