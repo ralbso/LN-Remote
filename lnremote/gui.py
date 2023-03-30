@@ -27,6 +27,30 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGridLayout, QGroupBox,
                                QRadioButton, QTableWidget, QTableWidgetItem,
                                QWidget, QStyle, QComboBox, QVBoxLayout)
 
+import logging
+from logging.handlers import RotatingFileHandler
+
+# create logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# create formatter
+stream_format = logging.Formatter('[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: %(levelname)-8s - %(message)s')
+
+# create console handler and set level to debug
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setLevel(logging.DEBUG)
+stream_handler.setFormatter(stream_format)
+
+# create file handler and set level to debug
+file_handler = RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(stream_format)
+
+# add handlers to logger
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
+
 
 class PositionPanel(QGroupBox):
     """Create the position panel, which contains the live position read-out from the
@@ -46,6 +70,7 @@ class PositionPanel(QGroupBox):
 
         self.createContents()
         self.addToLayout(layout)
+        logger.debug('Position panel created')
 
     def createContents(self):
         """Create the contents of the panel
@@ -133,9 +158,17 @@ class PositionPanel(QGroupBox):
     def updatePositionBoxes(self, positions: list):
         """Update position labels based off given positions list
         """
-        self.read_x.setText(f'{positions[0]:.2f}')
-        self.read_y.setText(f'{positions[1]:.2f}')
-        self.read_z.setText(f'{positions[2]:.2f}')
+        try:
+            x_axis = f'{positions[0]:.2f}'
+            y_axis = f'{positions[1]:.2f}'
+            z_axis = f'{positions[2]:.2f}'
+        except Exception as e:
+            logger.error(f'Error updating position boxes: {e}')
+            pass
+        else:
+            self.read_x.setText(x_axis)
+            self.read_y.setText(y_axis)
+            self.read_z.setText(z_axis)
 
 
 class CellsPanel(QGroupBox):
@@ -158,6 +191,8 @@ class CellsPanel(QGroupBox):
         self.enablePipetteCount()
 
         self.loadTableData()
+
+        logger.debug('Cells panel created')
 
     def styleLayout(self, layout):
         """Set all columns to be of equal width
@@ -198,6 +233,7 @@ class CellsPanel(QGroupBox):
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(['Pipette', 'Depth'])
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
 
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
@@ -314,7 +350,7 @@ class CellsPanel(QGroupBox):
         """
         print('Saving pipettes...')
         self.getTableData()
-        
+
         save_dir = Path(f'{self.save_dir}/{self.date}')
         save_dir.mkdir(parents=True, exist_ok=True)
         filepath = Path(f'{save_dir}/pipettes.csv')
@@ -334,8 +370,8 @@ class CellsPanel(QGroupBox):
         i = 1
         while True:
             try:
-                print(len(self.pipettes))
-                if len(self.pipettes) <= 2:
+                # print(len(self.pipettes))
+                if len(self.pipettes) < 1:
                     last_count = 0
                 else:
                     prev_pipette = self.pipettes[-i][0]
@@ -344,7 +380,7 @@ class CellsPanel(QGroupBox):
                 break
             except:
                 i += 1
-                print(i)
+                # print(i)
                 continue
 
     def setTableData(self):
@@ -400,6 +436,8 @@ class NavigationPanel(QGroupBox):
         self.addToLayout(layout)
 
         self.toggleNavigation()
+
+        logger.debug('Navigation panel created')
 
     def styleLayout(self, layout):
         """Ensure that all columns have the same width
@@ -606,6 +644,8 @@ class ControlsPanel(QGroupBox):
         self.createContents()
         self.addToLayout(layout)
 
+        logger.debug('Controls panel created')
+
     def createContents(self):
         """Create controls panel contents
         """
@@ -668,6 +708,7 @@ class ControlsPanel(QGroupBox):
     def exitBrain(self):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
         """
+        logger.debug('Exiting brain, moving to 100 um')
         self.manipulator.approachAxesPosition(axes=[1],
                                               approach_mode=0,
                                               positions=[100],
@@ -679,6 +720,7 @@ class ControlsPanel(QGroupBox):
         If the proceed anyway button is pressed, the pipette is first safely removed and then 
         quickly moved away.
         """
+        logger.debug('Moving away from the craniotomy')
         if self.inBrain():
             msg = 'Looks like the pipette is still in the brain.\nAborting command.'
             result = self.errorDialog(msg, kind='choice')
@@ -701,10 +743,11 @@ class ControlsPanel(QGroupBox):
                                                   speed_mode=1)
 
     def returnToCraniotomy(self):
-        """Return the pipette to the vicinity of the craniotomy. Similar to `moveAway()`, if the 
-        pipette is still in the tissue, a dialog box is displayed. This one however cannot be
-        overridden for safety.
+        """Return the pipette to the vicinity of the craniotomy. Similar to the `moveAway()` method, 
+        if the pipette is still in the tissue, a dialog box is displayed. This one however cannot be
+        overridden, for safety.
         """
+        logger.debug('Returning to the craniotomy')
         if self.inBrain():
             msg = 'Looks like the pipette is still in the brain.\nAborting command.'
             result = self.errorDialog(msg, kind='warning')
@@ -718,9 +761,12 @@ class ControlsPanel(QGroupBox):
     def inBrain(self):
         """Check whether the pipette is still in the brain (Position < 100 um)
         """
+        logger.debug('Checking if pipette is still in the brain...')
         if float(self.position_panel.read_x.text()) < 100.0:
+            logger.debug('Pipette is still in the brain')
             return True
         else:
+            logger.debug('Pipette is not in the brain')
             return False
 
     def errorDialog(self, error_message, kind='choice'):
@@ -731,6 +777,8 @@ class ControlsPanel(QGroupBox):
         error_message : str
             Error message to display on dialog box
         """
+        logger.warning(error_message)
+
         error_box = QMessageBox()
         error_box.setIcon(QtWidgets.QMessageBox.Critical)
         error_box.setWindowTitle('Error')
@@ -772,6 +820,8 @@ class ApproachWindow(QWidget):
 
         self.createContents()
         self.addToLayout(layout)
+
+        logger.debug('Approach window created')
 
     def createContents(self):
         """Create window contents
@@ -865,6 +915,7 @@ class ApproachWindow(QWidget):
         try:
             self.submitGoTo.emit([1], 0, [float(xcoord)], 0)
         except ValueError:
+            logger.error('Invalid input for X coordinate')
             pass
         self.close()
 
@@ -880,8 +931,10 @@ class ApproachWindow(QWidget):
         """Set the speed to whichever one was selected
         """
         if self.speed == 'slow':
+            logger.debug('Setting velocity to 6 (3um/s)')
             velocity = 6  # 3 um/s, 0.002630 rps
         elif self.speed == 'fast':
+            logger.debug('Setting velocity to 7 (6um/s)')
             velocity = 7  # 6 um/s, 0.005070 rps
 
         self.submitSpeed.emit([1], 0, velocity)
@@ -905,6 +958,8 @@ class AboutWindow(QWidget):
         label.setWordWrap(True)
         layout.addWidget(label)
 
+        logger.debug('About window created')
+
 class MainWindow(QMainWindow):
 
     CONFIG = LoadConfig().Gui()
@@ -918,6 +973,11 @@ class MainWindow(QMainWindow):
         self.interface = interface
         self.setupGui()
 
+        logger.debug('Main window initialized')
+
+    def __del__(self):
+        logger.debug('Main window destroyed')
+
     def setupGui(self):
         self.setWindowTitle('Manipulator GUI')
         self.setMinimumSize(QSize(400, 300))
@@ -929,7 +989,7 @@ class MainWindow(QMainWindow):
         self.setDisplayMode()
 
         self.position_panel = PositionPanel(self.interface.manipulator, self.interface)
-        self.cells_panel = CellsPanel(self.position_panel, self.PATH)
+        self.cells_panel = CellsPanel(self.position_panel, MainWindow.PATH)
         self.navigation_panel = NavigationPanel(self.interface.manipulator)
         self.controls_panel = ControlsPanel(self.interface.manipulator,
                                             self.position_panel, self.style)
@@ -951,8 +1011,10 @@ class MainWindow(QMainWindow):
         self.light_stylesheet = qdarkstyle.load_stylesheet(palette=LightPalette)
         self.dark_stylesheet = qdarkstyle.load_stylesheet(qt_api='pyside6')
         if self.dark_mode:
+            logger.debug('Setting dark mode')
             self.style = self.dark_stylesheet
         else:
+            logger.debug('Setting light mode')
             self.style = self.light_stylesheet
 
         self.setStyleSheet(self.style)
