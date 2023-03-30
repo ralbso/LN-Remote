@@ -14,9 +14,9 @@ class LoadConfig:
         self.config = configparser.ConfigParser()
         self.config.read(config_path)
 
-    def Gui(self):
+    def General(self):
         # GUI SETTINGS
-        return self.config._sections['GUI']
+        return self.config._sections['GENERAL']
 
     def Manipulator(self):
         # MANIPULATOR SETTINGS
