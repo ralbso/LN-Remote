@@ -6,6 +6,7 @@ Created on: 01/17/2023 14:27:00
 Author: rmojica
 """
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 
 from config_loader import LoadConfig
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # create formatter
-stream_format = logging.Formatter('[%(asctime)s] %(name)s %(lineno)-3d :: %(levelname)-8s - %(message)s')
+stream_format = logging.Formatter('[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: %(levelname)-8s - %(message)s')
 
 # create console handler and set level to debug
 stream_handler = logging.StreamHandler(sys.stdout)
@@ -29,7 +30,7 @@ stream_handler.setLevel(logging.DEBUG)
 stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
-file_handler = logging.RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
+file_handler = RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(stream_format)
 
@@ -80,15 +81,18 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def dataReadyCallback(self):
-        try:
-            self.main_window.position_panel.updatePositionBoxes(
-                self.acquisition_worker.data)
-            logger.debug(self.acquisition_worker.data)
-        except Exception as e:
-            logger.error(f'Hit a snag: {e}')
-            logger.error(f'Last read data: {self.acquisition_worker.data}')
-            pass
-        finally:
+        if self.acquisition_worker.data != None:
+            try:
+                self.main_window.position_panel.updatePositionBoxes(
+                    self.acquisition_worker.data)
+                logger.debug(self.acquisition_worker.data)
+            except Exception as e:
+                logger.error(f'Hit a snag: {e}')
+                logger.error(f'Last read data: {self.acquisition_worker.data}')
+            finally:
+                self.worker_wait_condition.wakeOne()
+        else:
+            logger.error('No position data received from manipulator.')
             self.worker_wait_condition.wakeOne()
 
     def onExit(self):
