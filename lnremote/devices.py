@@ -14,6 +14,7 @@ import threading
 import time
 
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 
 import select
@@ -29,15 +30,15 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # create formatter
-stream_format = logging.Formatter('[%(asctime)s] %(name)s %(lineno)-3d :: %(levelname)-8s - %(message)s')
+stream_format = logging.Formatter('[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: %(levelname)-8s - %(message)s')
 
 # create console handler and set level to debug
 stream_handler = logging.StreamHandler(sys.stdout)
-stream_handler.setLevel(logging.DEBUG)
+stream_handler.setLevel(logging.INFO)
 stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
-file_handler = logging.FileHandler('interface.log')
+file_handler = RotatingFileHandler('interface.log', maxBytes=1.024e6, backupCount=3)
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(stream_format)
 
@@ -213,7 +214,7 @@ class LNSM10:
         # calculate CRC for command parameters
         (MSB, LSB) = self.crc16(data)
 
-        logger.debug(data_n_bytes, len(data), data)
+        logger.debug(f'{data_n_bytes} {len(data)} {data}')
 
         try:
             if data_n_bytes != len(data):
@@ -233,8 +234,8 @@ class LNSM10:
         # convert command to bytes for COM interface
         bytes_command = binascii.unhexlify(command)
 
-        logger.debug('Cmd:', cmd_id, command)
-        logger.debug('Raw cmd:', bytes_command)
+        logger.debug(f'Cmd: {cmd_id} {command}')
+        logger.debug(f'Raw cmd: {bytes_command}')
 
         ans = None # assign ans to None to avoid UnboundLocalError
         if LNSM10.CONNECTION == 'serial':
@@ -287,14 +288,18 @@ class LNSM10:
 
         elif LNSM10.CONNECTION == 'socket':
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                try:
-                    s.connect((LNSM10.IP, LNSM10.PORT))
-                except TimeoutError:
-                    # if we can't communicate with the manipulator,
-                    # wait 100ms before attempting to connect again
-                    logger.error("Couldn't connect to manipulator. Retrying...")
-                    time.sleep(0.1)
-                    s.connect((LNSM10.IP, LNSM10.PORT))
+                address = (LNSM10.IP, LNSM10.PORT)
+                while True:
+                    try:
+                        s.connect(address)
+                    except (TimeoutError, socket.error) as e:
+                        # if we can't communicate with the manipulator,
+                        # wait 100ms before attempting to connect again
+                        logger.error(f"Couldn't connect to manipulator - {e}.")
+                        time.sleep(0.1)
+                        logger.info('Retrying...')
+                    else:
+                        break
 
                 s.sendall(bytes_command)
                 if resp_nbytes == 0:
@@ -311,7 +316,7 @@ class LNSM10:
             ans = None
             logger.debug(command)
 
-        logger.debug('Raw response:', ans)
+        logger.debug(f'Raw response: {ans}')
 
         return ans
 
@@ -1330,10 +1335,11 @@ class LNSM10:
                 struct.unpack('f', ans[16:20])[0],
                 struct.unpack('f', ans[20:24])[0]
             ]
-            return ans_decoded
         except Exception as e:
             logger.error(str(e))
-            pass
+            ans_decoded = [None, None, None, None]
+        finally:
+            return ans_decoded
 
     def readManipulator2(self, axes):
         cmd_id = 'A131'
