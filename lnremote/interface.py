@@ -6,10 +6,7 @@ Created on: 01/17/2023 14:27:00
 Author: rmojica
 """
 import logging
-from logging.handlers import RotatingFileHandler
-import sys
 
-from config_loader import LoadConfig
 from gui import MainWindow
 from devices import LNSM10
 
@@ -19,37 +16,13 @@ from PySide6.QtWidgets import QApplication
 
 # create logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-# create formatter
-stream_format = logging.Formatter('[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: %(levelname)-8s - %(message)s')
-
-# create console handler and set level to debug
-stream_handler = logging.StreamHandler(sys.stdout)
-stream_handler.setLevel(logging.DEBUG)
-stream_handler.setFormatter(stream_format)
-
-# create file handler and set level to debug
-file_handler = RotatingFileHandler('interface.log', maxBytes=int(1.024e6), backupCount=3)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(stream_format)
-
-# add handlers to logger
-logger.addHandler(stream_handler)
-logger.addHandler(file_handler)
 
 class Interface:
     """The `Interface` class serves as the messenger between the GUI and the device. Through it,
     we start the `QApplication` and initialize a worker thread (`AcquisitionWorker`) that
     continuously updates the manipulator's current position.
     """
-
-    CONFIG = LoadConfig().Manipulator()
-    IP = CONFIG['ip']
-    PORT = CONFIG['port']
-    SERIAL = CONFIG['serial']
-    DEBUG = CONFIG['debug'] == 'True'
-    CONNECTION = CONFIG['connection']
 
     def __init__(self):
         self.gui = QApplication([])
@@ -60,8 +33,8 @@ class Interface:
         self.main_window = MainWindow(interface=self)
 
         self.worker_wait_condition = QWaitCondition()
-        self.acquisition_worker = AcquisitionWorker(
-            self.worker_wait_condition, manipulator=self.manipulator)
+        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition,
+                                                    manipulator=self.manipulator)
         self.acquisition_thread = QThread()
 
         self.acquisition_worker.moveToThread(self.acquisition_thread)
@@ -81,11 +54,10 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def dataReadyCallback(self):
-        if self.acquisition_worker.data != None:
+        if self.acquisition_worker.data != [None] * 4:
             try:
-                self.main_window.position_panel.updatePositionBoxes(
-                    self.acquisition_worker.data)
-                logger.debug(self.acquisition_worker.data)
+                self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
+                logger.info(self.acquisition_worker.data)
             except Exception as e:
                 logger.error(f'Hit a snag: {e}')
                 logger.error(f'Last read data: {self.acquisition_worker.data}')
