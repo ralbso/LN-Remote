@@ -6,71 +6,48 @@ Created on: 12/01/2022 14:17:02
 Author: rmojica
 """
 
-import sys
 import csv
 import datetime
+import logging
 import time
 from pathlib import Path
+
 import numpy
 import qdarkstyle
-from qdarkstyle.light.palette import LightPalette
 import resources
-
 from __init__ import __about__
 from config_loader import LoadConfig
-from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtCore import QSize, Qt, Signal, Slot, QTimer
+from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtCore import QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QPalette
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QGridLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-                               QMenuBar, QMessageBox, QPushButton,
-                               QRadioButton, QTableWidget, QTableWidgetItem,
-                               QWidget, QStyle, QComboBox, QVBoxLayout)
-
-import logging
-from logging.handlers import RotatingFileHandler
+from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QGridLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenuBar, QMessageBox,
+                               QPushButton, QRadioButton, QStyle, QTableWidget, QTableWidgetItem,
+                               QVBoxLayout, QWidget)
+from qdarkstyle.light.palette import LightPalette
 
 # create logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-# create formatter
-stream_format = logging.Formatter('[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: %(levelname)-8s - %(message)s')
-
-# create console handler and set level to debug
-stream_handler = logging.StreamHandler(sys.stdout)
-stream_handler.setLevel(logging.DEBUG)
-stream_handler.setFormatter(stream_format)
-
-# create file handler and set level to debug
-file_handler = RotatingFileHandler('interface.log', maxBytes=int(1.024e6), backupCount=3)
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(stream_format)
-
-# add handlers to logger
-logger.addHandler(stream_handler)
-logger.addHandler(file_handler)
 
 
 class PositionPanel(QGroupBox):
     """Create the position panel, which contains the live position read-out from the
      manipulator, the Zero Axes button and the Stop button
      """
+
     def __init__(self, manipulator, interface):
         super().__init__("Position", parent=None)
         self.manipulator = manipulator
         self.interface = interface
 
-        self._axis_colors = {'X': 'color: #ffb91d',
-                             'Y': 'color: #06a005',
-                             'Z': 'color: #fa0606'}
+        self._axis_colors = {'X': 'color: #ffb91d', 'Y': 'color: #06a005', 'Z': 'color: #fa0606'}
 
         layout = QGridLayout()
         self.setLayout(layout)
 
         self.createContents()
         self.addToLayout(layout)
-        logger.debug('Position panel created')
+        logger.info('Position panel created')
 
     def createContents(self):
         """Create the contents of the panel
@@ -120,15 +97,14 @@ class PositionPanel(QGroupBox):
         self.read_z.setFont(QFont('Helvetica', 14))
         self.read_z.setReadOnly(True)
         self.read_z.setMaximumWidth(150)
-    
+
     def createStopButton(self):
         """Create button to stop all axes movement
         """
         self.stop_axes_btn = QPushButton('STOP')
         self.stop_axes_btn.setStyleSheet('padding:15px')
         self.stop_axes_btn.setToolTip('Immediately stop movement')
-        self.stop_axes_btn.clicked.connect(
-            lambda: self.manipulator.stopAxes([1, 2, 3]))
+        self.stop_axes_btn.clicked.connect(lambda: self.manipulator.stopAxes([1, 2, 3]))
 
     def createResetAxesButton(self):
         """Create button to reset all axes to zero on counter 1
@@ -136,8 +112,7 @@ class PositionPanel(QGroupBox):
         self.zero_btn = QPushButton('Zero Axes')
         self.zero_btn.setStyleSheet('padding:15px')
         self.zero_btn.setToolTip('Zero all axes')
-        self.zero_btn.clicked.connect(
-            lambda: self.manipulator.resetAxesZero([1, 2, 3]))
+        self.zero_btn.clicked.connect(lambda: self.manipulator.resetAxesZero([1, 2, 3]))
 
     def createUnitLabel(self):
         """Create reusable label for axes units (um)
@@ -192,7 +167,7 @@ class CellsPanel(QGroupBox):
 
         self.loadTableData()
 
-        logger.debug('Cells panel created')
+        logger.info('Cells panel created')
 
     def styleLayout(self, layout):
         """Set all columns to be of equal width
@@ -280,7 +255,7 @@ class CellsPanel(QGroupBox):
         """Create button to increase pipette count by 1
         """
         self.pipette_count_add_btn = QPushButton('+')
-        self.pipette_count_add_btn.setFixedSize(25,25)
+        self.pipette_count_add_btn.setFixedSize(25, 25)
         self.pipette_count_add_btn.clicked.connect(self.increasePipetteCount)
 
     def increasePipetteCount(self):
@@ -309,7 +284,7 @@ class CellsPanel(QGroupBox):
         """Remove row from table
         """
         total_rows = self.table.rowCount()
-        self.table.removeRow(total_rows-1)
+        self.table.removeRow(total_rows - 1)
 
     def addPatchedCell(self):
         """Store the current pipette/cell number and its current position to the previously-created
@@ -320,15 +295,13 @@ class CellsPanel(QGroupBox):
         current_row = self.table.rowCount()
         current_pipette = self.pipette_count.text()
         if self.pipette_checkbox.isChecked():
-            self.table.setItem(current_row - 1, 0,
-                               QTableWidgetItem(f'p{current_pipette}'))
-            self.pipette_count.setText(str(int(current_pipette)+1))
+            self.table.setItem(current_row - 1, 0, QTableWidgetItem(f'p{current_pipette}'))
+            self.pipette_count.setText(str(int(current_pipette) + 1))
         else:
             pass
 
         current_position = self.position_panel.read_x.text()
-        self.table.setItem(current_row - 1, 1,
-                           QTableWidgetItem(current_position))
+        self.table.setItem(current_row - 1, 1, QTableWidgetItem(current_position))
 
     def getTableData(self):
         """Extract data from table
@@ -348,7 +321,7 @@ class CellsPanel(QGroupBox):
     def saveTableData(self):
         """Save data on table to csv
         """
-        print('Saving pipettes...')
+        logger.info('Saving pipettes...')
         self.getTableData()
 
         save_dir = Path(f'{self.save_dir}/{self.date}')
@@ -356,11 +329,11 @@ class CellsPanel(QGroupBox):
         filepath = Path(f'{save_dir}/pipettes.csv')
         with open(filepath, 'w') as f:
             numpy.savetxt(f,
-                            self.pipettes,
-                            delimiter=",",
-                            comments="",
-                            header="pipette,depth",
-                            fmt='%s')
+                          self.pipettes,
+                          delimiter=",",
+                          comments="",
+                          header="pipette,depth",
+                          fmt='%s')
 
     def overwritePipetteCount(self):
         """If loading a previously-stored pipettes file to display on the table, we also
@@ -370,7 +343,6 @@ class CellsPanel(QGroupBox):
         i = 1
         while True:
             try:
-                # print(len(self.pipettes))
                 if len(self.pipettes) < 1:
                     last_count = 0
                 else:
@@ -380,7 +352,6 @@ class CellsPanel(QGroupBox):
                 break
             except:
                 i += 1
-                # print(i)
                 continue
 
     def setTableData(self):
@@ -396,7 +367,7 @@ class CellsPanel(QGroupBox):
             for col in range(col_count):
                 item = QTableWidgetItem(str(self.pipettes[row][col]))
                 self.table.setItem(row - 1, col, item)
-        
+
         if row_count > 1:
             self.overwritePipetteCount()
             self.pipette_count.setEnabled(True)
@@ -406,19 +377,20 @@ class CellsPanel(QGroupBox):
     def loadTableData(self):
         """Load previously-saved pipettes file and populate the table
         """
-        load_dir = Path(f'{self.save_dir}/{self.date}/pipettes.csv') 
+        load_dir = Path(f'{self.save_dir}/{self.date}/pipettes.csv')
         if load_dir.exists():
             self.pipettes = []
             with open(load_dir, newline='') as csvfile:
                 for row in csv.reader(csvfile, delimiter=','):
                     self.pipettes.append(row)
             self.setTableData()
-            print('Loaded pipettes.')
+            logger.info('Loaded pipettes.')
 
 
 class NavigationPanel(QGroupBox):
     """Create the navigation panel, which contains all navigation-related buttons and menus
     """
+
     def __init__(self, manipulator):
         super().__init__('Navigation')
         self.manipulator = manipulator
@@ -428,7 +400,7 @@ class NavigationPanel(QGroupBox):
 
         self._velocities = {'slow': 6, 'med': 10, 'fast': 15}
         self.velocity = int(list(self._velocities.values())[0])
-        
+
         layout = QGridLayout()
         self.setLayout(layout)
 
@@ -437,7 +409,7 @@ class NavigationPanel(QGroupBox):
 
         self.toggleNavigation()
 
-        logger.debug('Navigation panel created')
+        logger.info('Navigation panel created')
 
     def styleLayout(self, layout):
         """Ensure that all columns have the same width
@@ -460,7 +432,7 @@ class NavigationPanel(QGroupBox):
         self.createNavigateYBackwardButton()
         self.createNavigateZUpButton()
         self.createNavigateZDownButton()
-    
+
     def addToLayout(self, layout):
         """Add all contents to the panel's layout
         """
@@ -620,8 +592,8 @@ class NavigationPanel(QGroupBox):
     def setMovementParameters(self, speed_mode, velocity):
         """Set the selected movement parameters for each axis
         """
-        print('Setting default movement parameters')
-        for axis in range(1,4):
+        logger.info('Setting default movement parameters')
+        for axis in range(1, 4):
             self.manipulator.setMovementVelocity(axis, speed_mode, velocity)
 
 
@@ -644,7 +616,7 @@ class ControlsPanel(QGroupBox):
         self.createContents()
         self.addToLayout(layout)
 
-        logger.debug('Controls panel created')
+        logger.info('Controls panel created')
 
     def createContents(self):
         """Create controls panel contents
@@ -699,16 +671,14 @@ class ControlsPanel(QGroupBox):
         """
         if self.approach_win is None:
             self.approach_win = ApproachWindow(self.style)
-        self.approach_win.submitGoTo.connect(
-            self.manipulator.approachAxesPosition)
-        self.approach_win.submitSpeed.connect(
-            self.manipulator.setPositioningVelocity)
+        self.approach_win.submitGoTo.connect(self.manipulator.approachAxesPosition)
+        self.approach_win.submitSpeed.connect(self.manipulator.setPositioningVelocity)
         self.approach_win.show()
 
     def exitBrain(self):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
         """
-        logger.debug('Exiting brain, moving to 100 um')
+        logger.info('Exiting brain, moving to 100 um')
         self.manipulator.approachAxesPosition(axes=[1],
                                               approach_mode=0,
                                               positions=[100],
@@ -720,7 +690,7 @@ class ControlsPanel(QGroupBox):
         If the proceed anyway button is pressed, the pipette is first safely removed and then 
         quickly moved away.
         """
-        logger.debug('Moving away from the craniotomy')
+        logger.info('Moving away from the craniotomy')
         if self.inBrain():
             msg = 'Looks like the pipette is still in the brain.\nAborting command.'
             result = self.errorDialog(msg, kind='choice')
@@ -729,9 +699,9 @@ class ControlsPanel(QGroupBox):
                 time.sleep(1)
                 if not self.inBrain():
                     self.manipulator.approachAxesPosition(axes=[2, 3],
-                                                      approach_mode=0,
-                                                      positions=[-26000, 26000],
-                                                      speed_mode=1)
+                                                          approach_mode=0,
+                                                          positions=[-26000, 26000],
+                                                          speed_mode=1)
             else:
                 pass
 
@@ -748,7 +718,7 @@ class ControlsPanel(QGroupBox):
         if the pipette is still in the tissue, a dialog box is displayed. This one however cannot be
         overridden, for safety.
         """
-        logger.debug('Returning to the craniotomy')
+        logger.info('Returning to the craniotomy')
         if self.inBrain():
             msg = 'Looks like the pipette is still in the brain.\nAborting command.'
             result = self.errorDialog(msg, kind='warning')
@@ -762,12 +732,12 @@ class ControlsPanel(QGroupBox):
     def inBrain(self):
         """Check whether the pipette is still in the brain (Position < 100 um)
         """
-        logger.debug('Checking if pipette is still in the brain...')
+        logger.info('Checking if pipette is still in the brain...')
         if float(self.position_panel.read_x.text()) < 100.0:
-            logger.debug('Pipette is still in the brain')
+            logger.info('Pipette is still in the brain')
             return True
         else:
-            logger.debug('Pipette is not in the brain')
+            logger.info('Pipette is not in the brain')
             return False
 
     def errorDialog(self, error_message, kind='choice'):
@@ -801,7 +771,7 @@ class ControlsPanel(QGroupBox):
 class ApproachWindow(QWidget):
     """Create window that allows the user to navigate to a specific X coordinate.
     """
-    
+
     submitGoTo = Signal(list, float, list, int)
     submitSpeed = Signal(list, int, int)
 
@@ -822,7 +792,7 @@ class ApproachWindow(QWidget):
         self.createContents()
         self.addToLayout(layout)
 
-        logger.debug('Approach window created')
+        logger.info('Approach window created')
 
     def createContents(self):
         """Create window contents
@@ -932,10 +902,10 @@ class ApproachWindow(QWidget):
         """Set the speed to whichever one was selected
         """
         if self.speed == 'slow':
-            logger.debug('Setting velocity to 6 (3um/s)')
+            logger.info('Setting velocity to 6 (3um/s)')
             velocity = 6  # 3 um/s, 0.002630 rps
         elif self.speed == 'fast':
-            logger.debug('Setting velocity to 7 (6um/s)')
+            logger.info('Setting velocity to 7 (6um/s)')
             velocity = 7  # 6 um/s, 0.005070 rps
 
         self.submitSpeed.emit([1], 0, velocity)
@@ -947,7 +917,7 @@ class AboutWindow(QWidget):
 
     def __init__(self, style):
         super().__init__()
-        self.setFixedSize(275,175)
+        self.setFixedSize(275, 175)
         self.setWindowTitle('About')
         self.setStyleSheet(style)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
@@ -959,14 +929,13 @@ class AboutWindow(QWidget):
         label.setWordWrap(True)
         layout.addWidget(label)
 
-        logger.debug('About window created')
+        logger.info('About window created')
+
 
 class MainWindow(QMainWindow):
 
-    CONFIG = LoadConfig().Gui()
+    CONFIG = LoadConfig().General()
     PATH = CONFIG['data_path']
-    DEBUG = CONFIG['debug'] == 'True'
-    WAVESURFER = CONFIG['wavesurfer'] == 'True'
 
     def __init__(self, interface):
         super().__init__()
@@ -974,10 +943,10 @@ class MainWindow(QMainWindow):
         self.interface = interface
         self.setupGui()
 
-        logger.debug('Main window initialized')
+        logger.info('Main window initialized')
 
     def __del__(self):
-        logger.debug('Main window destroyed')
+        logger.info('Main window destroyed')
 
     def setupGui(self):
         self.setWindowTitle('Manipulator GUI')
@@ -992,8 +961,8 @@ class MainWindow(QMainWindow):
         self.position_panel = PositionPanel(self.interface.manipulator, self.interface)
         self.cells_panel = CellsPanel(self.position_panel, MainWindow.PATH)
         self.navigation_panel = NavigationPanel(self.interface.manipulator)
-        self.controls_panel = ControlsPanel(self.interface.manipulator,
-                                            self.position_panel, self.style)
+        self.controls_panel = ControlsPanel(self.interface.manipulator, self.position_panel,
+                                            self.style)
 
         self.content_layout = QGridLayout()
         self.content_layout.addWidget(self.position_panel, 0, 0)
@@ -1012,10 +981,10 @@ class MainWindow(QMainWindow):
         self.light_stylesheet = qdarkstyle.load_stylesheet(palette=LightPalette)
         self.dark_stylesheet = qdarkstyle.load_stylesheet(qt_api='pyside6')
         if self.dark_mode:
-            logger.debug('Setting dark mode')
+            logger.info('Setting dark mode')
             self.style = self.dark_stylesheet
         else:
-            logger.debug('Setting light mode')
+            logger.info('Setting light mode')
             self.style = self.light_stylesheet
 
         self.setStyleSheet(self.style)
