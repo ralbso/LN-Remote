@@ -54,18 +54,17 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def dataReadyCallback(self):
-        if self.acquisition_worker.data != [None] * 4:
-            try:
-                self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
-                logger.info(self.acquisition_worker.data)
-            except Exception as e:
-                logger.error(f'Hit a snag: {e}')
-                logger.error(f'Last read data: {self.acquisition_worker.data}')
-            finally:
-                self.worker_wait_condition.wakeOne()
-        else:
-            logger.error('No position data received from manipulator.')
+        # if self.acquisition_worker.data != [None] * 4:
+        try:
+            self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
+        except Exception as e:
+            logger.error(f'Hit a snag: {e}')
+            logger.error(f'Last read data: {self.acquisition_worker.data}')
+        finally:
             self.worker_wait_condition.wakeOne()
+        # else:
+        #     logger.error('No position data received from manipulator.')
+        #     self.worker_wait_condition.wakeOne()
 
     def onExit(self):
         self.acquisition_worker.stop()
