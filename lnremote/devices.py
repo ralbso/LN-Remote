@@ -15,8 +15,6 @@ import time
 
 import logging
 
-import select
-
 import numpy as np
 import serial
 import serial.tools.list_ports
@@ -202,7 +200,7 @@ class LNSM10:
             command += '%0.2X' % data[i]
         command += '%0.2X%0.2X' % (MSB, LSB)
 
-        # convert command to bytes for COM interface
+        # convert command to bytes
         bytes_command = binascii.unhexlify(command)
 
         logger.debug(f'Cmd: {cmd_id} {command}')
@@ -277,8 +275,6 @@ class LNSM10:
                 if resp_nbytes == 0:
                     ans = None
                 else:
-                    # ready = select.select([s], [], [], self._socket_timeout)
-                    # logger.info(f'{ready[0]}')
                     while True:
                         try:
                             ans = s.recv(resp_nbytes)
@@ -1343,7 +1339,7 @@ class LNSM10:
         # bytes   : <1>  <1>  <1>  <1> <1>    <1>    <1>    <1>    <4>     <4>     <4>     <4>     <1>   <1>     <total: 26>
         resp_nbytes = 26
 
-        logger.debug(f'Reading secondary manipulator position for axes {axes}')
+        logger.debug(f'Reading position for axes {axes} on Counter 2')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
@@ -1353,31 +1349,67 @@ class LNSM10:
                 struct.unpack('f', ans[16:20])[0],
                 struct.unpack('f', ans[20:24])[0]
             ]
-            return ans_decoded
         except Exception as e:
             logger.error(str(e))
-            pass
+            ans_decoded = [None, None, None, None]
+        finally:
+            return ans_decoded
 
     def queryAxesState(self, axes):
+        """Query the state of the input axes. The command response is a list of 4 tuples,
+        each containing the status of the limit switch, the current power, motor status,
+        and the single step resolution.
+
+        Limit switch: 
+            `0`: no limit switch active
+            `1`: negative limit switch active
+            `2`: positive limit switch active
+        Axis power:
+            `0`: axis is powered off
+            `1`: axis is powered on
+        Motor status:
+            `0`: motor is stopped
+            `1`: motor is moving
+        Single step resolution:
+            `0`-`255`: Set number of microsteps per single step command
+
+        Parameters
+        ----------
+        axes : list of int
+            Axes to query state for.
+
+        Returns
+        -------
+        list of tuples
+            Status of the input axes as described above. The location of each tuple corresponds
+            to the input axes list (i.e. the first tuple in the list corresponds to the first input
+            axis).
+        """        
         adr = [0] * 4
         adr[:len(axes)] = axes
 
         cmd_id = 'A120'
         nbytes = 5
         group_flag = 0xA0
-        resp_nbytes = 14
 
         data = ([group_flag] + adr)
+        # response: <ACK><ID1><ID2><14><ax1><ax2><ax3><ax4><stat1><stat2><stat3><stat4><MSB><LSB>
+        # bytes   : <1>  <1>  <1>  <1> <1>  <1>  <1>  <1>  <4>    <4>    <4>    <4>    <1>  <1>   <total: 26>
+        resp_nbytes = 26
 
-        logger.debug(f'Querying axes state for axes {axes}')
+        logger.debug(f'Querying state for axes {axes}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
-        # print(ans)
-        # try:
-        #     ans_decoded = [[struct.unpack('i', ans[8:12])[0],
-        #                     struct.unpack('i', ans[12:16])[0],
-        #                     struct.unpack('i', ans[16:20])[0],
-        #                     struct.unpack('i', ans[20:24])[0]],
-        #                    [struct.unpack]]
+        
+        try:
+            ans_decoded = [(ans[8], ans[9], ans[10], ans[11]), 
+                           (ans[12], ans[13], ans[14], ans[15]), 
+                           (ans[16], ans[17], ans[18], ans[19]),
+                           (ans[20], ans[21], ans[22], ans[23])]
+        except Exception as e:
+            logger.error(str(e))
+            ans_decoded = [None, None, None, None]
+        finally:
+            return ans_decoded
 
     @staticmethod
     def convertToFloatBytes(arg):
@@ -1416,36 +1448,23 @@ class LNSM10:
 
     # CRC Calculation
     @staticmethod
-    def calculateCRC(data_bytes):
-        crc_polynomial = 0x1021
-        crc = 0
-
-        for idx, val in enumerate(data_bytes):
-            if isinstance(val, bytes):
-                data_bytes[idx] = int.from_bytes(val, 'big')
-
-        for byte in data_bytes:
-            crc = crc ^ byte << 8
-            for i in np.arange(8):
-                if (crc & 0x8000):
-                    crc = crc << 1 ^ crc_polynomial
-                else:
-                    crc = crc << 1
-
-        crcMSB = ctypes.c_ubyte(crc >> 8)
-        crcLSB = ctypes.c_ubyte(crc)
-
-        return (crcMSB.value, crcLSB.value)
-
-    @staticmethod
     def crc16(data_bytes: bytes):
-        '''
-        CRC-16 (CCITT) implemented with a precomputed lookup table
-        '''
+        """Use the given polynomial to calculate the CRC of the given data in bytes.
+
+        Parameters
+        ----------
+        data_bytes : bytes
+            Data to calculate the CRC of.
+
+        Returns
+        -------
+        tuple of bytes
+            MSB and LSB of the CRC.
+        """
         polyn = 0x1021
 
         crc = 0xFFFF
-        for byte in data_bytes:
+        for _ in data_bytes:
             crc = (crc << 8) ^ polyn
             crc &= 0xFFFF
 
