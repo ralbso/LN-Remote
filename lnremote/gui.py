@@ -11,18 +11,18 @@ import datetime
 import logging
 import time
 from pathlib import Path
+import resources
 
 import numpy
 import qdarkstyle
-import resources
 from __init__ import __about__
 from config_loader import LoadConfig
 from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtCore import QSize, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QFont, QPalette
+from PySide6.QtCore import QSize, Qt, Signal, Slot
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QGridLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenuBar, QMessageBox,
-                               QPushButton, QRadioButton, QStyle, QTableWidget, QTableWidgetItem,
+                               QPushButton, QRadioButton, QTableWidget, QTableWidgetItem,
                                QVBoxLayout, QWidget)
 from qdarkstyle.light.palette import LightPalette
 
@@ -510,7 +510,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateXInButton(self):
         """Create button to move X in
         """
-        icon = QtGui.QIcon(":/icons/left-arrow-yellow.svg")
+        icon = QtGui.QIcon(":/icons/circle-left-yellow.svg")
         self.navigate_x_in_btn = QPushButton()
         self.navigate_x_in_btn.setIcon(icon)
         self.navigate_x_in_btn.setStyleSheet('padding:10px')
@@ -522,7 +522,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateXOutButton(self):
         """Create button to move X out
         """
-        icon = QtGui.QIcon(":/icons/right-arrow-yellow.svg")
+        icon = QtGui.QIcon(":/icons/circle-right-yellow.svg")
         self.navigate_x_out_btn = QPushButton()
         self.navigate_x_out_btn.setIcon(icon)
         self.navigate_x_out_btn.setStyleSheet('padding:10px')
@@ -534,7 +534,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateYForwardButton(self):
         """Create button to move Y forwards
         """
-        icon = QtGui.QIcon(":/icons/up-arrow-green.svg")
+        icon = QtGui.QIcon(":/icons/circle-up-green.svg")
         self.navigate_y_fwd_btn = QPushButton()
         self.navigate_y_fwd_btn.setIcon(icon)
         self.navigate_y_fwd_btn.setStyleSheet('padding:10px')
@@ -546,7 +546,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateYBackwardButton(self):
         """Create button to move Y backwards
         """
-        icon = QtGui.QIcon(":/icons/down-arrow-green.svg")
+        icon = QtGui.QIcon(":/icons/circle-down-green.svg")
         self.navigate_y_bwd_btn = QPushButton()
         self.navigate_y_bwd_btn.setIcon(icon)
         self.navigate_y_bwd_btn.setStyleSheet('padding:10px')
@@ -558,7 +558,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateZUpButton(self):
         """Create button to move Z up
         """
-        icon = QtGui.QIcon(":/icons/up-arrow-red.svg")
+        icon = QtGui.QIcon(":/icons/circle-up-red.svg")
         self.navigate_z_up_btn = QPushButton()
         self.navigate_z_up_btn.setIcon(icon)
         self.navigate_z_up_btn.setStyleSheet('padding:10px')
@@ -570,7 +570,7 @@ class NavigationPanel(QGroupBox):
     def createNavigateZDownButton(self):
         """Create button to move Z down
         """
-        icon = QtGui.QIcon(":/icons/down-arrow-red.svg")
+        icon = QtGui.QIcon(":/icons/circle-down-red.svg")
         self.navigate_z_down_btn = QPushButton()
         self.navigate_z_down_btn.setIcon(icon)
         self.navigate_z_down_btn.setStyleSheet('padding:10px')
@@ -949,6 +949,8 @@ class MainWindow(QMainWindow):
         logger.info('Main window destroyed')
 
     def setupGui(self):
+        icon = QtGui.QIcon(":/icons/LN-icon1.svg")
+        self.setWindowIcon(icon)
         self.setWindowTitle('Manipulator GUI')
         self.setMinimumSize(QSize(400, 300))
         self.setMinimumWidth(400)
