@@ -902,10 +902,12 @@ class ApproachWindow(QWidget):
         """Set the speed to whichever one was selected
         """
         if self.speed == 'slow':
-            logger.info('Setting velocity to 6 (3um/s)')
-            velocity = 6  # 3 um/s, 0.002630 rps
+            logger.info('Setting velocity to 5 (1.5 um/s)')
+            # vel = 6 --> 3 um/s, 0.002630 rps
+            # vel = 5 --> 1.5 um/s, 0.001280 rps
+            velocity = 6
         elif self.speed == 'fast':
-            logger.info('Setting velocity to 7 (6um/s)')
+            logger.info('Setting velocity to 7 (6 um/s)')
             velocity = 7  # 6 um/s, 0.005070 rps
 
         self.submitSpeed.emit([1], 0, velocity)
@@ -955,7 +957,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(400, 300))
         self.setMinimumWidth(400)
         self.setFont(QFont('Helvetica', 14))
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        # self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.dark_mode = True
 
         self.setDisplayMode()
