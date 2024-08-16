@@ -3,6 +3,7 @@ import datetime
 import logging
 import time
 from pathlib import Path
+import resources
 
 import numpy
 import qdarkstyle
@@ -496,6 +497,7 @@ class NavigationPanel(QGroupBox):
         """Enable/disable manual navigation buttons
         """
         if self.navigation_checkbox.isChecked():
+            logger.info('Enabling navigation buttons')
             self.navigation_speed_dropdown.setEnabled(True)
             self.navigation_velocity_dropdown.setEnabled(True)
             self.navigate_x_in_btn.setEnabled(True)
@@ -507,6 +509,7 @@ class NavigationPanel(QGroupBox):
 
             self.setMovementParameters(self.speed_mode, self.velocity)
         else:
+            logger.info('Disabling navigation buttons')
             self.navigation_speed_dropdown.setEnabled(False)
             self.navigation_velocity_dropdown.setEnabled(False)
             self.navigate_x_in_btn.setEnabled(False)
