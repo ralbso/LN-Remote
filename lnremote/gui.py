@@ -23,14 +23,18 @@ from qdarkstyle.light.palette import LightPalette
 logger = logging.getLogger(__name__)
 
 
+class SelectedAxes():
+    def __init__(self):
+        self.selected = [1, 2, 3]
+
+
 class PositionPanel(QGroupBox):
     """Create the position panel, which contains the live position read-out
     from the manipulator, the Zero Axes button and the Stop button
     """
-    def __init__(self, manipulator, interface):
+    def __init__(self, manipulator, axes):
         super().__init__("Position", parent=None)
         self.manipulator = manipulator
-        self.interface = interface
 
         self._axis_colors = {
             'X': 'color: #ffb91d',
@@ -144,7 +148,7 @@ class PositionPanel(QGroupBox):
         self.zero_btn.setStyleSheet('padding:15px')
         self.zero_btn.setToolTip('Zero all axes')
         self.zero_btn.clicked.connect(
-            lambda: self.manipulator.resetAxesZero([1, 2, 3, 7, 8, 9]))
+            lambda: self.manipulator.resetAxesZero())
 
     def createUnitLabel(self):
         """Create reusable label for axes units (um)
@@ -429,9 +433,10 @@ class NavigationPanel(QGroupBox):
     """Create the navigation panel, which contains all navigation-related
     buttons and menus
     """
-    def __init__(self, manipulator):
+    def __init__(self, manipulator, axes):
         super().__init__('Navigation')
         self.manipulator = manipulator
+        self.AXES = axes
 
         self._speed_modes = {'L': 0, 'H': 1}
         self.speed_mode = int(list(self._speed_modes.values())[0])
@@ -507,7 +512,8 @@ class NavigationPanel(QGroupBox):
             self.navigate_z_up_btn.setEnabled(True)
             self.navigate_z_down_btn.setEnabled(True)
 
-            self.setMovementParameters(self.speed_mode, self.velocity)
+            self.setMovementParameters(self.AXES.selected, self.speed_mode,
+                                       self.velocity)
         else:
             logger.info('Disabling navigation buttons')
             self.navigation_speed_dropdown.setEnabled(False)
@@ -531,7 +537,8 @@ class NavigationPanel(QGroupBox):
         """Get the selected speed mode
         """
         self.speed_mode = self._speed_modes[speed_mode]
-        self.setMovementParameters(self.speed_mode, self.velocity)
+        self.setMovementParameters(self.AXES.selected, self.speed_mode,
+                                   self.velocity)
 
     def createNavigationVelocityDropdown(self):
         """Create dropdown with navigation velocities. This may look similar
@@ -549,7 +556,8 @@ class NavigationPanel(QGroupBox):
         """Get the selected speed mode
         """
         self.velocity = self._velocities[velocity]
-        self.setMovementParameters(self.speed_mode, self.velocity)
+        self.setMovementParameters(self.AXES.selected, self.speed_mode,
+                                   self.velocity)
 
     def createNavigateXInButton(self):
         """Create button to move X in
@@ -559,7 +567,7 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_in_btn.setIcon(icon)
         self.navigate_x_in_btn.setStyleSheet('padding:10px')
 
-        ax = 1
+        ax = 0
         self.navigate_x_in_btn.pressed.connect(
             lambda: self.onPress(ax, self.speed_mode, -1))
         self.navigate_x_in_btn.released.connect(lambda: self.onRelease(ax))
@@ -572,7 +580,7 @@ class NavigationPanel(QGroupBox):
         self.navigate_x_out_btn.setIcon(icon)
         self.navigate_x_out_btn.setStyleSheet('padding:10px')
 
-        ax = 1
+        ax = 0
         self.navigate_x_out_btn.pressed.connect(
             lambda: self.onPress(ax, self.speed_mode, 1))
         self.navigate_x_out_btn.released.connect(lambda: self.onRelease(ax))
@@ -585,7 +593,7 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_fwd_btn.setIcon(icon)
         self.navigate_y_fwd_btn.setStyleSheet('padding:10px')
 
-        ax = 2
+        ax = 1
         self.navigate_y_fwd_btn.pressed.connect(
             lambda: self.onPress(ax, self.speed_mode, 1))
         self.navigate_y_fwd_btn.released.connect(lambda: self.onRelease(ax))
@@ -598,7 +606,7 @@ class NavigationPanel(QGroupBox):
         self.navigate_y_bwd_btn.setIcon(icon)
         self.navigate_y_bwd_btn.setStyleSheet('padding:10px')
 
-        ax = 2
+        ax = 1
         self.navigate_y_bwd_btn.pressed.connect(
             lambda: self.onPress(ax, self.speed_mode, -1))
         self.navigate_y_bwd_btn.released.connect(lambda: self.onRelease(ax))
@@ -611,7 +619,7 @@ class NavigationPanel(QGroupBox):
         self.navigate_z_up_btn.setIcon(icon)
         self.navigate_z_up_btn.setStyleSheet('padding:10px')
 
-        ax = 3
+        ax = 2
         self.navigate_z_up_btn.pressed.connect(
             lambda: self.onPress(ax, self.speed_mode, 1))
         self.navigate_z_up_btn.released.connect(lambda: self.onRelease(ax))
@@ -624,7 +632,7 @@ class NavigationPanel(QGroupBox):
         self.navigate_z_down_btn.setIcon(icon)
         self.navigate_z_down_btn.setStyleSheet('padding:10px')
 
-        ax = 3
+        ax = 2
         self.navigate_z_down_btn.pressed.connect(
             lambda: self.onPress(ax, self.speed_mode, -1))
         self.navigate_z_down_btn.released.connect(lambda: self.onRelease(ax))
@@ -633,18 +641,20 @@ class NavigationPanel(QGroupBox):
         """If button is pressed, move the `axis` at the specified `speed_mod`
         towards `direction`
         """
-        self.manipulator.moveAxis(axis, speed_mode, direction, velocity)
+        ax_to_move = self.AXES.selected[axis]
+        self.manipulator.moveAxis(ax_to_move, speed_mode, direction, velocity)
 
     def onRelease(self, axis):
         """If button is released, stop the `axis`
         """
-        self.manipulator.stopMovement(axis)
+        ax_to_stop = self.AXES.selected[axis]
+        self.manipulator.stopMovement(ax_to_stop)
 
-    def setMovementParameters(self, speed_mode, velocity):
+    def setMovementParameters(self, axis, speed_mode, velocity):
         """Set the selected movement parameters for each axis
         """
         logger.info('Setting default movement parameters')
-        for axis in range(1, 4):
+        for axis in self.AXES.selected:
             self.manipulator.setMovementVelocity(axis, speed_mode, velocity)
 
 
@@ -652,13 +662,15 @@ class ControlsPanel(QGroupBox):
     """Create the controls panel, which contains all other manipulator
     controls, with a focus on automation.
     """
-    def __init__(self, manipulator, position_panel, style):
+    def __init__(self, manipulator, position_panel, style, axes):
         super().__init__('Controls')
 
         self.manipulator = manipulator
         self.position_panel = position_panel
         self.approach_win = None
         self.style = style
+
+        self.AXES = axes
 
         layout = QGridLayout()
         self.setLayout(layout)
@@ -704,8 +716,6 @@ class ControlsPanel(QGroupBox):
         self.unit_selection_dropdown.setToolTip('Select unit')
         self.unit_selection_dropdown.currentTextChanged.connect(
             self.unitChanged)
-        self._current_unit = 1
-        self._current_axes = [1, 2, 3]
 
     def createApproachButton(self):
         """Create approach button, which opens the approach position dialog
@@ -743,19 +753,20 @@ class ControlsPanel(QGroupBox):
         """Change unit to visualize and move
         """
         if self.unit_selection_dropdown.currentText() == 'Intracellular':
-            self._current_unit = 1
-            self._current_axes = [1, 2, 3]
+            # self._current_unit = 1
+            self.AXES.selected = [1, 2, 3]
         else:
-            self._current_unit = 2
-            self._current_axes = [7, 8, 9]
+            # self._current_unit = 2
+            self.AXES.selected = [7, 8, 9]
 
-        self.manipulator.setUnit(self._current_unit)
+        # self.manipulator.setUnit(self._current_unit)
+        self.manipulator.setCurrentAxes(self.AXES.selected)
 
     def approachPositionDialog(self):
         """Open approach position dialog
         """
         if self.approach_win is None:
-            self.approach_win = ApproachWindow(self.style, self._current_axes)
+            self.approach_win = ApproachWindow(self.style, self.AXES.selected)
         self.approach_win.submitGoTo.connect(
             self.manipulator.approachAxesPosition)
         self.approach_win.submitSpeed.connect(
@@ -766,7 +777,7 @@ class ControlsPanel(QGroupBox):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
         """
         logger.info('Exiting brain, moving to 100 um')
-        self.manipulator.approachAxesPosition(axes=[self._current_axes[0]],
+        self.manipulator.approachAxesPosition(axes=[self.AXES.selected[0]],
                                               approach_mode=0,
                                               positions=[100],
                                               speed_mode=0)
@@ -789,7 +800,7 @@ class ControlsPanel(QGroupBox):
                 time.sleep(1)
                 if not self.inBrain():
                     self.manipulator.approachAxesPosition(
-                        axes=[self._current_axes[1:3]],
+                        axes=[self.AXES.selected[1:3]],
                         approach_mode=0,
                         positions=[-26000, 26000],
                         speed_mode=1)
@@ -803,7 +814,7 @@ class ControlsPanel(QGroupBox):
                                       velocity=None)
             time.sleep(0.5)
             self.manipulator.approachAxesPosition(
-                axes=[self._current_axes[1:3]],
+                axes=[self.AXES.selected[1:3]],
                 approach_mode=0,
                 positions=[-26000, 26000],
                 speed_mode=1)
@@ -822,7 +833,7 @@ class ControlsPanel(QGroupBox):
             pass
         else:
             self.manipulator.approachAxesPosition(
-                axes=[self._current_axes[1:3]],
+                axes=[self.AXES.selected[1:3]],
                 approach_mode=0,
                 positions=[500, 1000],
                 speed_mode=1)
@@ -1046,7 +1057,8 @@ class MainWindow(QMainWindow):
     def __init__(self, interface):
         super().__init__()
 
-        self.interface = interface
+        self.manipulator = interface.manipulator
+        self.axes = SelectedAxes()
         self.setupGui()
 
         logger.info('Main window initialized')
@@ -1066,12 +1078,13 @@ class MainWindow(QMainWindow):
 
         self.setDisplayMode()
 
-        self.position_panel = PositionPanel(self.interface.manipulator,
-                                            self.interface)
+        self.position_panel = PositionPanel(self.manipulator, self.axes)
         self.cells_panel = CellsPanel(self.position_panel, MainWindow.PATH)
-        self.navigation_panel = NavigationPanel(self.interface.manipulator)
-        self.controls_panel = ControlsPanel(self.interface.manipulator,
-                                            self.position_panel, self.style)
+        self.navigation_panel = NavigationPanel(self.manipulator,
+                                                self.axes)
+        self.controls_panel = ControlsPanel(self.manipulator,
+                                            self.position_panel, self.style,
+                                            self.axes)
 
         self.content_layout = QGridLayout()
         self.content_layout.addWidget(self.position_panel, 0, 0)
