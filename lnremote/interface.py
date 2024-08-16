@@ -1,10 +1,3 @@
-""""""
-"""
-File: d:/GitHub/LN-Remote/lnremote/interface.py
-
-Created on: 01/17/2023 14:27:00
-Author: rmojica
-"""
 import logging
 
 from gui import MainWindow
@@ -54,7 +47,6 @@ class Interface:
         self.worker_wait_condition.wakeOne()
 
     def dataReadyCallback(self):
-        # if self.acquisition_worker.data != [None] * 4:
         try:
             self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
         except Exception as e:
@@ -62,9 +54,6 @@ class Interface:
             logger.error(f'Last read data: {self.acquisition_worker.data}')
         finally:
             self.worker_wait_condition.wakeOne()
-        # else:
-        #     logger.error('No position data received from manipulator.')
-        #     self.worker_wait_condition.wakeOne()
 
     def onExit(self):
         self.acquisition_worker.stop()
@@ -101,11 +90,12 @@ class AcquisitionWorker(QObject):
             self.wait_condition.wait(self.mutex)
             self.mutex.unlock()
 
-            time.sleep(0.1)
+            time.sleep(0.5)
             self.data = self.manipulator.readManipulator([1, 2, 3])
             self.data_ready.emit()
 
         self.finished.emit()
 
     def stop(self):
+        logger.info('Stopping AcquisitionWorker...')
         self.keep_running = False
