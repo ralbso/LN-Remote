@@ -96,7 +96,7 @@ class PositionPanel(QGroupBox):
         self.stop_axes_btn = QPushButton('STOP')
         self.stop_axes_btn.setStyleSheet('padding:15px')
         self.stop_axes_btn.setToolTip('Immediately stop movement')
-        self.stop_axes_btn.clicked.connect(lambda: self.manipulator.stopAxes([1, 2, 3]))
+        self.stop_axes_btn.clicked.connect(lambda: self.manipulator.stopAxes([1, 2, 3, 7, 8, 9]))
 
     def createResetAxesButton(self):
         """Create button to reset all axes to zero on counter 1
@@ -104,7 +104,7 @@ class PositionPanel(QGroupBox):
         self.zero_btn = QPushButton('Zero Axes')
         self.zero_btn.setStyleSheet('padding:15px')
         self.zero_btn.setToolTip('Zero all axes')
-        self.zero_btn.clicked.connect(lambda: self.manipulator.resetAxesZero([1, 2, 3]))
+        self.zero_btn.clicked.connect(lambda: self.manipulator.resetAxesZero([1, 2, 3, 7, 8, 9]))
 
     def createUnitLabel(self):
         """Create reusable label for axes units (um)
