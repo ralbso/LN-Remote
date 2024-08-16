@@ -9,7 +9,9 @@ root_logger.setLevel(logging.DEBUG)
 
 # create formatter
 stream_format = logging.Formatter(
-    '[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: %(levelname)-8s - %(message)s')
+    "[%(asctime)s] %(name)s:%(funcName)s:%(lineno)-3d :: "
+    "%(levelname)-8s - %(message)s"
+)
 
 # create console handler and set level to debug
 stream_handler = logging.StreamHandler(sys.stdout)

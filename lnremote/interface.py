@@ -4,7 +4,8 @@ from gui import MainWindow
 from devices import LNSM10
 
 import time
-from PySide6.QtCore import QMutex, QObject, QThread, QWaitCondition, Signal, Slot
+from PySide6.QtCore import (QMutex, QObject, QThread, QWaitCondition, Signal,
+                            Slot)
 from PySide6.QtWidgets import QApplication
 
 # create logger
@@ -12,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 class Interface:
-    """The `Interface` class serves as the messenger between the GUI and the device. Through it,
-    we start the `QApplication` and initialize a worker thread (`AcquisitionWorker`) that
-    continuously updates the manipulator's current position.
+    """The `Interface` class serves as the messenger between the GUI and
+    the device. Through it, we start the `QApplication` and initialize a
+    worker thread (`AcquisitionWorker`) that continuously updates the
+    manipulator's current position.
     """
-
     def __init__(self):
         self.gui = QApplication([])
 
@@ -26,8 +27,9 @@ class Interface:
         self.main_window = MainWindow(interface=self)
 
         self.worker_wait_condition = QWaitCondition()
-        self.acquisition_worker = AcquisitionWorker(self.worker_wait_condition,
-                                                    manipulator=self.manipulator)
+        self.acquisition_worker = AcquisitionWorker(
+            self.worker_wait_condition,
+            manipulator=self.manipulator)
         self.acquisition_thread = QThread()
 
         self.acquisition_worker.moveToThread(self.acquisition_thread)
@@ -48,7 +50,8 @@ class Interface:
 
     def dataReadyCallback(self):
         try:
-            self.main_window.position_panel.updatePositionBoxes(self.acquisition_worker.data)
+            self.main_window.position_panel.updatePositionBoxes(
+                self.acquisition_worker.data)
         except Exception as e:
             logger.error(f'Hit a snag: {e}')
             logger.error(f'Last read data: {self.acquisition_worker.data}')
@@ -63,9 +66,9 @@ class Interface:
 
 
 class AcquisitionWorker(QObject):
-    """The `AcquisitionWorker` class serves as a worker thread for the `Interface` class. It
-    continuously reads the manipulator's current position and emits a signal when new data is
-    available.
+    """The `AcquisitionWorker` class serves as a worker thread for the
+    `Interface` class. It continuously reads the manipulator's current
+    position and emits a signal when new data is available.
     """
 
     finished = Signal()
