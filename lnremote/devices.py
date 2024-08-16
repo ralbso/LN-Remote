@@ -839,7 +839,6 @@ class LNSM10:
         axis : int
             Axis selection
         """
-        assert axis >= 1 and axis <= 3
         cmd_id = "00F0"
         nbytes = 1
 
@@ -857,7 +856,6 @@ class LNSM10:
         axis : int
             Axis selection
         """
-        assert axis >= 1 and axis <= 3
         cmd_id = "0132"
         nbytes = 2
         counter = 2
@@ -894,7 +892,6 @@ class LNSM10:
         axis : int
             Axis selection
         """
-        assert axis >= 1 and axis <= 3
         cmd_id = "00FF"
         nbytes = 1
 
@@ -1099,8 +1096,6 @@ class LNSM10:
         group = self.calculateGroupAddress(axes)
         nbytes = 0x0A
         group_flag = 0xA0
-
-        print(group)
 
         data = [group_flag] + group
 
@@ -1466,7 +1461,7 @@ class LNSM10:
             ax_mask[ax - 1] = 1
         binary = [SBs[i] * ax_mask[i] for i in range(len(SBs))]
         dec = [sum(binary[i:i + 4]) for i in range(0, len(binary), 4)]
-        adr = [str.encode(chr(dec[i+1]) + chr(dec[i]))
+        adr = [f"{dec[i+1]:02X}{dec[i]:02X}"
                for i in range(0, len(dec) - 1, 2)][::-1]
         return adr
 
