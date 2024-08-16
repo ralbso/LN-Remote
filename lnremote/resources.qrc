@@ -1,12 +1,12 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="icons">
-        <file alias="circle-up-green.svg">../assets/icons/circle-up-green.svg</file>
-        <file alias="circle-down-green.svg">../assets/icons/circle-down-green.svg</file>
-        <file alias="circle-up-red.svg">../assets/icons/circle-up-red.svg</file>
-        <file alias="circle-down-red.svg">../assets/icons/circle-down-red.svg</file>
-        <file alias="circle-left-yellow.svg">../assets/icons/circle-left-yellow.svg</file>
-        <file alias="circle-right-yellow.svg">../assets/icons/circle-right-yellow.svg</file>
-        <file alias="LN-icon1.svg">../assets/icons/LN-icon1.svg</file>
+        <file alias="circle-up-green.svg">/assets/icons/circle-up-green.svg</file>
+        <file alias="circle-down-green.svg">/assets/icons/circle-down-green.svg</file>
+        <file alias="circle-up-red.svg">/assets/icons/circle-up-red.svg</file>
+        <file alias="circle-down-red.svg">/assets/icons/circle-down-red.svg</file>
+        <file alias="circle-left-yellow.svg">/assets/icons/circle-left-yellow.svg</file>
+        <file alias="circle-right-yellow.svg">/assets/icons/circle-right-yellow.svg</file>
+        <file alias="LN-icon1.svg">/assets/icons/LN-icon1.svg</file>
     </qresource>
 </RCC> 
