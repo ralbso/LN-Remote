@@ -41,6 +41,7 @@ class LNSM10:
         self._homed = False
         self._socket_timeout = 1
         self._unit = 1
+        self._selected_axes = [1, 2, 3]
 
         if LNSM10.CONNECTION == "serial":
             logger.info("Establishing serial connection...")
@@ -66,8 +67,8 @@ class LNSM10:
         if LNSM10.CONNECTION == "socket":
             logger.info("Testing ethernet connection...")
             s = socket.socket()
+            # s.settimeout(self._socket_timeout)
             try:
-                s.timeout = self._socket_timeout
                 s.connect((LNSM10.IP, LNSM10.PORT))
             except Exception as e:
                 logger.error(
@@ -289,6 +290,7 @@ class LNSM10:
                     else:
                         break
 
+                s.sendall(bytes_command)
                 if resp_nbytes == 0:
                     ans = None
                 else:
@@ -1310,8 +1312,9 @@ class LNSM10:
         self.sendCommand(cmd_id, nbytes, data)
 
     # GROUP QUERIES
-    def readManipulator(self, axes):
+    def readManipulator(self):
         cmd_id = "A101"
+        axes = self._selected_axes
 
         adr = [0] * 4
         adr[:len(axes)] = axes
@@ -1321,7 +1324,7 @@ class LNSM10:
         data = [group_flag] + adr
         resp_nbytes = 26
 
-        logger.debug(f"Reading main manipulator position for axes {axes}")
+        logger.debug(f"Reading manipulator position for axes {axes}")
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
