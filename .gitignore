@@ -5,3 +5,4 @@ config.ini
 update_resources.bat
 start_manipulator_gui.bat
 *.log*
+*egg*
