@@ -1,10 +1,3 @@
-""""""
-"""
-File: d:/GitHub/LN-Remote/lnremote/run.py
-
-Created on: 01/17/2023 21:01:56
-Author: rmojica
-"""
 import sys
 from interface import Interface
 
@@ -25,8 +18,8 @@ stream_handler.setFormatter(stream_format)
 
 # create file handler and set level to debug
 file_handler = RotatingFileHandler('interface.log',
-                                                    maxBytes=int(1.024e6),
-                                                    backupCount=3)
+                                   maxBytes=int(1.024e6),
+                                   backupCount=3)
 file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(stream_format)
 
