@@ -94,7 +94,7 @@ class AcquisitionWorker(QObject):
             self.mutex.unlock()
 
             time.sleep(0.5)
-            self.data = self.manipulator.readManipulator([1, 2, 3])
+            self.data = self.manipulator.readManipulator()
             self.data_ready.emit()
 
         self.finished.emit()
