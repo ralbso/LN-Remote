@@ -1,11 +1,3 @@
-""""""
-"""
-File: d:/GitHub/LN-Remote/lnremote/gui.py
-
-Created on: 12/01/2022 14:17:02
-Author: rmojica
-"""
-
 import csv
 import datetime
 import logging
@@ -625,14 +617,35 @@ class ControlsPanel(QGroupBox):
         self.createExitBrainButton()
         self.createMoveAwayButton()
         self.createReturnButton()
+        self.createUnitSelectionLabel()
+        self.createUnitSelectionDropdown()
 
     def addToLayout(self, layout):
         """Add contents to layout
         """
-        layout.addWidget(self.approach_btn, 0, 0)
-        layout.addWidget(self.exit_brain_btn, 0, 1)
-        layout.addWidget(self.move_away_btn, 1, 0)
-        layout.addWidget(self.return_btn, 1, 1)
+        layout.addWidget(self.unit_selection_label, 0, 0)
+        layout.addWidget(self.unit_selection_dropdown, 0, 1)
+        layout.addWidget(self.approach_btn, 1, 0)
+        layout.addWidget(self.exit_brain_btn, 1, 1)
+        layout.addWidget(self.move_away_btn, 2, 0)
+        layout.addWidget(self.return_btn, 2, 1)
+
+    def createUnitSelectionLabel(self):
+        """Create label to select unit to visualize and move
+        """
+        self.unit_selection_label = QLabel('Manipulator:')
+        self.unit_selection_label.setFont(QFont('Helvetica', 12))
+        self.unit_selection_label.setStyleSheet('padding:2px; qproperty-alignment:AlignCenter;')
+
+    def createUnitSelectionDropdown(self):
+        """Create dropdown to select unit to visualize and move
+        """
+        self.unit_selection_dropdown = QComboBox()
+        self.unit_selection_dropdown.addItems(['Intracellular', 'LFP'])
+        self.unit_selection_dropdown.setToolTip('Select unit')
+        self.unit_selection_dropdown.currentTextChanged.connect(self.unitChanged)
+        self._current_unit = 1
+        self._current_axes = [1, 2, 3]
 
     def createApproachButton(self):
         """Create approach button, which opens the approach position dialog
@@ -666,11 +679,23 @@ class ControlsPanel(QGroupBox):
         self.return_btn.setToolTip('Return pipette to the craniotomy')
         self.return_btn.clicked.connect(self.returnToCraniotomy)
 
+    def unitChanged(self):
+        """Change unit to visualize and move
+        """
+        if self.unit_selection_dropdown.currentText() == 'Intracellular':
+            self._current_unit = 1
+            self._current_axes = [1, 2, 3]
+        else:
+            self._current_unit = 2
+            self._current_axes = [7, 8, 9]
+
+        self.manipulator.setUnit(self._current_unit)
+
     def approachPositionDialog(self):
         """Open approach position dialog
         """
         if self.approach_win is None:
-            self.approach_win = ApproachWindow(self.style)
+            self.approach_win = ApproachWindow(self.style, self._current_axes)
         self.approach_win.submitGoTo.connect(self.manipulator.approachAxesPosition)
         self.approach_win.submitSpeed.connect(self.manipulator.setPositioningVelocity)
         self.approach_win.show()
@@ -679,7 +704,7 @@ class ControlsPanel(QGroupBox):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
         """
         logger.info('Exiting brain, moving to 100 um')
-        self.manipulator.approachAxesPosition(axes=[1],
+        self.manipulator.approachAxesPosition(axes=[self._current_axes[0]],
                                               approach_mode=0,
                                               positions=[100],
                                               speed_mode=0)
@@ -687,7 +712,7 @@ class ControlsPanel(QGroupBox):
     def moveAway(self):
         """Move away from the tissue. If the pipette position indicates it might still be in the
         tissue, a dialog box pops up and allows the user to cancel or proceed anyway.\n
-        If the proceed anyway button is pressed, the pipette is first safely removed and then 
+        If the proceed anyway button is pressed, the pipette is first safely removed and then
         quickly moved away.
         """
         logger.info('Moving away from the craniotomy')
@@ -698,7 +723,7 @@ class ControlsPanel(QGroupBox):
                 self.exitBrain()  # first exit brain
                 time.sleep(1)
                 if not self.inBrain():
-                    self.manipulator.approachAxesPosition(axes=[2, 3],
+                    self.manipulator.approachAxesPosition(axes=[self._current_axes[1:3]],
                                                           approach_mode=0,
                                                           positions=[-26000, 26000],
                                                           speed_mode=1)
@@ -708,7 +733,7 @@ class ControlsPanel(QGroupBox):
         else:
             self.manipulator.moveAxis(axis=1, speed_mode=1, direction=1, velocity=None)
             time.sleep(0.5)
-            self.manipulator.approachAxesPosition(axes=[2, 3],
+            self.manipulator.approachAxesPosition(axes=[self._current_axes[1:3]],
                                                   approach_mode=0,
                                                   positions=[-26000, 26000],
                                                   speed_mode=1)
@@ -721,10 +746,10 @@ class ControlsPanel(QGroupBox):
         logger.info('Returning to the craniotomy')
         if self.inBrain():
             msg = 'Looks like the pipette is still in the brain.\nAborting command.'
-            result = self.errorDialog(msg, kind='warning')
+            self.errorDialog(msg, kind='warning')
             pass
         else:
-            self.manipulator.approachAxesPosition(axes=[2, 3],
+            self.manipulator.approachAxesPosition(axes=[self._current_axes[1:3]],
                                                   approach_mode=0,
                                                   positions=[500, 1000],
                                                   speed_mode=1)
@@ -775,10 +800,12 @@ class ApproachWindow(QWidget):
     submitGoTo = Signal(list, float, list, int)
     submitSpeed = Signal(list, int, int)
 
-    def __init__(self, style):
+    def __init__(self, style, axes):
         super().__init__()
         self.setWindowTitle('Approach')
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
+
+        self.axes = axes
 
         self.setStyleSheet(style)
         # default speed to 'slow'
@@ -884,7 +911,7 @@ class ApproachWindow(QWidget):
         """
         xcoord = self.goto_x.text()
         try:
-            self.submitGoTo.emit([1], 0, [float(xcoord)], 0)
+            self.submitGoTo.emit([self.axes[0]], 0, [float(xcoord)], 0)
         except ValueError:
             logger.error('Invalid input for X coordinate')
             pass
@@ -910,7 +937,7 @@ class ApproachWindow(QWidget):
             logger.info('Setting velocity to 7 (6 um/s)')
             velocity = 7  # 6 um/s, 0.005070 rps
 
-        self.submitSpeed.emit([1], 0, velocity)
+        self.submitSpeed.emit([self.axes[0]], 0, velocity)
 
 
 class AboutWindow(QWidget):
