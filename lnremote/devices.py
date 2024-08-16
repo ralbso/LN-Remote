@@ -39,7 +39,7 @@ class LNSM10:
         self._inside_brain = False
         self._timeout = None
         self._homed = False
-        self._socket_timeout = 0.5
+        self._socket_timeout = 1
         self._unit = 1
 
         if LNSM10.CONNECTION == "serial":
@@ -67,6 +67,7 @@ class LNSM10:
             logger.info("Testing ethernet connection...")
             s = socket.socket()
             try:
+                s.timeout = self._socket_timeout
                 s.connect((LNSM10.IP, LNSM10.PORT))
             except Exception as e:
                 logger.error(
@@ -281,14 +282,13 @@ class LNSM10:
                         s.connect(address)
                     except (TimeoutError, socket.error) as e:
                         # if we can't communicate with the manipulator,
-                        # wait 500ms before attempting to connect again
+                        # wait 250ms before attempting to connect again
                         logger.error(f"Couldn't connect to manipulator - {e}.")
-                        time.sleep(0.5)
+                        time.sleep(0.25)
                         logger.info("Retrying...")
                     else:
                         break
 
-                s.sendall(bytes_command)
                 if resp_nbytes == 0:
                     ans = None
                 else:
