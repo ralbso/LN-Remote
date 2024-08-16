@@ -30,6 +30,7 @@ class TestConnection(unittest.TestCase):
         lnsm10_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Act
+        lnsm10_socket.settimeout(2)
         lnsm10_socket.connect((lnsm10.IP, lnsm10.PORT))
 
         # Assert
