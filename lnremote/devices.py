@@ -1,11 +1,3 @@
-""""""
-"""
-File: d:/GitHub/raul-exps/LN-Remote/lnremote/devices.py
-
-Created on: 10/14/2022 14:56:24
-Author: rmojica
-"""
-
 import binascii
 import ctypes
 import socket
@@ -15,11 +7,10 @@ import time
 
 import logging
 
-import numpy as np
 import serial
 import serial.tools.list_ports
 
-from config_loader import LoadConfig
+from lnremote.config_loader import LoadConfig
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -48,6 +39,7 @@ class LNSM10:
         self._timeout = None
         self._homed = False
         self._socket_timeout = 0.5
+        self._unit = 1
 
         if LNSM10.CONNECTION == 'serial':
             logger.info('Establishing serial connection...')
@@ -64,7 +56,7 @@ class LNSM10:
             logger.info('Connection to SM10 closed.')
 
     def __repr__(self):
-        return f'Luigs and Neumann SM10 manipulator'
+        return 'Luigs and Neumann SM10 manipulator'
 
     def checkDevice(self):
         # check ethernet connection
@@ -119,7 +111,7 @@ class LNSM10:
                     correct_device = device
                     break
 
-            if correct_device == None:
+            if correct_device is None:
                 raise IOError('Could not find manipulator... Is it connected?')
 
             return correct_device
@@ -150,6 +142,17 @@ class LNSM10:
         logger.info(f'Connected to SM10 on {port}.')
 
         return ser
+
+    def setUnit(self, unit):
+        """Set the unit of the manipulator.
+
+        Parameters
+        ----------
+        unit : int
+            Unit of the manipulator. Can be 1 or 2.
+        """
+        assert (unit == 1 or unit == 2)
+        self._unit = unit
 
     # SEND COMMANDS
     def sendCommand(self, cmd_id, data_n_bytes, data, resp_nbytes=0):
@@ -264,7 +267,7 @@ class LNSM10:
                         s.connect(address)
                     except (TimeoutError, socket.error) as e:
                         # if we can't communicate with the manipulator,
-                        # wait 100ms before attempting to connect again
+                        # wait 500ms before attempting to connect again
                         logger.error(f"Couldn't connect to manipulator - {e}.")
                         time.sleep(0.5)
                         logger.info('Retrying...')
@@ -356,7 +359,7 @@ class LNSM10:
         elif direction == -1:
             cmd_id = '0141'  # step decrement
 
-        if (increment != None) and (velocity != None):
+        if (increment is not None) and (velocity is not None):
             increment = self.convertToFloatBytes(increment)
             self.setStepDistance(axis, increment)
             time.sleep(0.01)
@@ -986,7 +989,7 @@ class LNSM10:
         elif power == 1:
             cmd_id = 'A035'
 
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0A
         group_flag = 0xA0
         data = ([group_flag] + group)
@@ -1003,7 +1006,7 @@ class LNSM10:
             List of axes to group for command.
         """
         cmd_id = 'A0F0'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
 
         nbytes = 0x0A
         group_flag = 0xA0
@@ -1021,7 +1024,7 @@ class LNSM10:
             List of axes to group for command.
         """
         cmd_id = 'A132'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
 
         nbytes = 0x0A
         group_flag = 0xA0
@@ -1055,7 +1058,7 @@ class LNSM10:
     #         elif speed_mode == 0:
     #             cmd_id = 'A015'
 
-    #     group = self.getGroupAddress(axes)
+    #     group = self.calculateGroupAddress(axes)
 
     #     nbytes = 0x0B
     #     group_flag = 0xA0
@@ -1072,7 +1075,7 @@ class LNSM10:
             List of axes to group for command
         """
         cmd_id = 'A0FF'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0A
         group_flag = 0xA0
 
@@ -1094,7 +1097,7 @@ class LNSM10:
         assert (velocity > 0 and velocity < 16)
 
         cmd_id = 'A024'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0B
         group_flag = 0xA0
 
@@ -1116,7 +1119,7 @@ class LNSM10:
         assert (slot_number > 0 and slot_number <= 5)
 
         cmd_id = 'A10A'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0B
         group_flag = 0xA0
 
@@ -1142,7 +1145,7 @@ class LNSM10:
         assert (velocity > 0 and velocity < 16)
 
         cmd_id = 'A110'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0C
         group_flag = 0xA0
 
@@ -1173,7 +1176,7 @@ class LNSM10:
         elif direction == -1:
             cmd_id = 'A141'
 
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0F
         group_flag = 0xA0
 
@@ -1200,7 +1203,7 @@ class LNSM10:
             direction is which.
         """
         cmd_id = 'A104'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0B
         group_flag = 0xA0
 
@@ -1223,7 +1226,7 @@ class LNSM10:
         assert (velocity > 0 and velocity < 16)
 
         cmd_id = 'A022'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0B
         group_flag = 0xA0
 
@@ -1244,7 +1247,7 @@ class LNSM10:
             List of axes to group for command
         """
         cmd_id = 'A13F'
-        group = self.getGroupAddress(axes)
+        group = self.calculateGroupAddress(axes)
         nbytes = 0x0A
         group_flag = 0xA0
 
@@ -1360,7 +1363,7 @@ class LNSM10:
         each containing the status of the limit switch, the current power, motor status,
         and the single step resolution.
 
-        Limit switch: 
+        Limit switch:
             `0`: no limit switch active
             `1`: negative limit switch active
             `2`: positive limit switch active
@@ -1399,10 +1402,10 @@ class LNSM10:
 
         logger.debug(f'Querying state for axes {axes}')
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
-        
+
         try:
-            ans_decoded = [(ans[8], ans[9], ans[10], ans[11]), 
-                           (ans[12], ans[13], ans[14], ans[15]), 
+            ans_decoded = [(ans[8], ans[9], ans[10], ans[11]),
+                           (ans[12], ans[13], ans[14], ans[15]),
                            (ans[16], ans[17], ans[18], ans[19]),
                            (ans[20], ans[21], ans[22], ans[23])]
         except Exception as e:
@@ -1420,20 +1423,31 @@ class LNSM10:
         elif isinstance(arg, list):
             return [byte for item in arg for byte in bytearray(struct.pack('f', item))]
 
+    # @staticmethod
+    # def getGroupAddress(axes):
+    #     if ((1 in axes) and (2 in axes) and (3 in axes)):
+    #         adr = [0, 0, 0, 0, 0, 0, 0, 0, 7]
+    #     elif ((1 in axes) and (2 in axes) and (3 not in axes)):
+    #         adr = [0, 0, 0, 0, 0, 0, 0, 0, 3]
+    #     elif ((1 in axes) and (2 not in axes) and (3 in axes)):
+    #         adr = [0, 0, 0, 0, 0, 0, 0, 0, 5]
+    #     elif ((1 not in axes) and (2 in axes) and (3 in axes)):
+    #         adr = [0, 0, 0, 0, 0, 0, 0, 0, 6]
+    #     # elif ((1 ))
+
+    #     return adr
+
     @staticmethod
-    def getGroupAddress(axes):
-        if ((1 in axes) and (2 in axes) and (3 in axes)):
-            XYZ = [0, 0, 0, 0, 0, 0, 0, 0, 7]
-            return XYZ
-        elif ((1 in axes) and (2 in axes) and (3 not in axes)):
-            XY = [0, 0, 0, 0, 0, 0, 0, 0, 3]
-            return XY
-        elif ((1 in axes) and (2 not in axes) and (3 in axes)):
-            XZ = [0, 0, 0, 0, 0, 0, 0, 0, 5]
-            return XZ
-        elif ((1 not in axes) and (2 in axes) and (3 in axes)):
-            YZ = [0, 0, 0, 0, 0, 0, 0, 0, 6]
-            return YZ
+    def calculateGroupAddress(axes):
+        SBs = [1, 2, 4, 8] * 18
+        ax_mask = [0] * len(SBs)
+        for ax in axes:
+            ax_mask[ax - 1] = 1
+        binary = [SBs[i] * ax_mask[i] for i in range(len(SBs))]
+        binsum = [sum(binary[i:i+4]) for i in range(0, len(binary), 4)]
+        adr = [binsum[i+1] + binsum[i] for i in range(0, len(binsum)-1, 2)]
+        # adr = [binascii.unhexlify(chr(binsum[i+1]) + chr(binsum[i])) for i in range(0, len(binsum)-1, 2)]
+        return adr[::-1]
 
     @staticmethod
     def checkResponse(cmd_id, ans):
