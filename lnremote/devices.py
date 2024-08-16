@@ -11,6 +11,7 @@ import serial
 import serial.tools.list_ports
 
 from lnremote.config_loader import LoadConfig
+import numpy as np
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -164,6 +165,18 @@ class LNSM10:
         assert unit == 1 or unit == 2
         self._unit = unit
 
+    def setCurrentAxes(self, axes):
+        """Set the axes to be manipulated.
+
+        Parameters
+        ----------
+        axes : list of int
+            List of axes to be manipulated.
+        """
+        assert isinstance(axes, list)
+        logger.info(f"Setting current axes to {axes}")
+        self._selected_axes = axes
+
     # SEND COMMANDS
     def sendCommand(self, cmd_id, data_n_bytes, data, resp_nbytes=0):
         """The heart of the communication protocol.
@@ -211,10 +224,13 @@ class LNSM10:
             raise
 
         # compile full command string
-        command = LNSM10.SYN + cmd_id + "%0.2X" % data_n_bytes
+        command = f"{LNSM10.SYN}{cmd_id}{data_n_bytes:02X}"
         for i in range(len(data)):
-            command += "%0.2X" % data[i]
-        command += "%0.2X%0.2X" % (MSB, LSB)
+            if isinstance(data[i], int):
+                command += f"{data[i]:02X}"
+            elif isinstance(data[i], bytes):
+                command += data[i].hex()
+        command += f"{MSB:02X}{LSB:02X}"
 
         # convert command to bytes
         bytes_command = binascii.unhexlify(command)
@@ -852,7 +868,7 @@ class LNSM10:
         logger.debug(f"Resetting axis {axis} secondary counter to 0")
         self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
-    def moveaxisToZero(self, axis):
+    def moveAxisToZero(self, axis):
         """Move selected axis to zero.
 
         Parameters
@@ -1032,7 +1048,7 @@ class LNSM10:
         logger.debug(f"Switching power for axes {axes} to {power}")
         self.sendCommand(cmd_id, nbytes, data)
 
-    def resetAxesZero(self, axes):
+    def resetAxesZero(self):
         """Reset grouped axes' location counter to 0.
 
         Parameters
@@ -1041,16 +1057,17 @@ class LNSM10:
             List of axes to group for command.
         """
         cmd_id = "A0F0"
-        group = self.calculateGroupAddress(axes)
+        group = self.calculateGroupAddress(self._selected_axes)
 
         nbytes = 0x0A
         group_flag = 0xA0
         data = [group_flag] + group
 
-        logger.debug(f"Resetting main location counter for axes {axes} to 0")
+        logger.debug("Resetting primary counter for axes "
+                     f"{self._selected_axes} to 0")
         self.sendCommand(cmd_id, nbytes, data)
 
-    def resetAxesZero2(self, axes):
+    def resetAxesZero2(self):
         """Reset grouped axes' secondary location counter to 0.
 
         Parameters
@@ -1059,14 +1076,15 @@ class LNSM10:
             List of axes to group for command.
         """
         cmd_id = "A132"
-        group = self.calculateGroupAddress(axes)
+        group = self.calculateGroupAddress(self._selected_axes)
 
         nbytes = 0x0A
         group_flag = 0xA0
         data = [group_flag] + group
 
         logger.debug(
-            f"Resetting secondary location counter for axes {axes} to 0")
+            "Resetting secondary location counter for axes "
+            f"{self._selected_axes} to 0")
         self.sendCommand(cmd_id, nbytes, data)
 
     def stopAxes(self, axes):
@@ -1081,6 +1099,8 @@ class LNSM10:
         group = self.calculateGroupAddress(axes)
         nbytes = 0x0A
         group_flag = 0xA0
+
+        print(group)
 
         data = [group_flag] + group
 
@@ -1328,12 +1348,7 @@ class LNSM10:
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
-            ans_decoded = [
-                struct.unpack("f", ans[8:12])[0],
-                struct.unpack("f", ans[12:16])[0],
-                struct.unpack("f", ans[16:20])[0],
-                struct.unpack("f", ans[20:24])[0],
-            ]
+            ans_decoded = np.frombuffer(ans[8:24], dtype=np.float32)
         except Exception as e:
             logger.error(str(e))
             ans_decoded = [None, None, None, None]
@@ -1355,12 +1370,7 @@ class LNSM10:
         ans = self.sendCommand(cmd_id, nbytes, data, resp_nbytes)
 
         try:
-            ans_decoded = [
-                struct.unpack("f", ans[8:12])[0],
-                struct.unpack("f", ans[12:16])[0],
-                struct.unpack("f", ans[16:20])[0],
-                struct.unpack("f", ans[20:24])[0],
-            ]
+            ans_decoded = np.frombuffer(ans[8:24], dtype=np.float32)
         except Exception as e:
             logger.error(str(e))
             ans_decoded = [None, None, None, None]
@@ -1455,9 +1465,10 @@ class LNSM10:
         for ax in axes:
             ax_mask[ax - 1] = 1
         binary = [SBs[i] * ax_mask[i] for i in range(len(SBs))]
-        binsum = [sum(binary[i:i + 4]) for i in range(0, len(binary), 4)]
-        adr = [binsum[i + 1] + binsum[i] for i in range(0, len(binsum) - 1, 2)]
-        return adr[::-1]
+        dec = [sum(binary[i:i + 4]) for i in range(0, len(binary), 4)]
+        adr = [str.encode(chr(dec[i+1]) + chr(dec[i]))
+               for i in range(0, len(dec) - 1, 2)][::-1]
+        return adr
 
     @staticmethod
     def checkResponse(cmd_id, ans):
