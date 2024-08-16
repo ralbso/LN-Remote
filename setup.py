@@ -4,7 +4,7 @@ import re
 
 def get_property(prop, project):
     result = re.search(r'{}\s*=\s*[\'"]([^\'"]*)[\'"]'.format(prop),
-                       open(f"{project} + '/__init__.py'").read())
+                       open(f"{project}/__init__.py").read())
     return result.group(1)
 
 
