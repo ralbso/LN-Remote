@@ -144,7 +144,7 @@ class PositionPanel(QGroupBox):
     def createResetAxesButton(self):
         """Create button to reset all axes to zero on counter 1
         """
-        self.zero_btn = QPushButton('Zero Axes')
+        self.zero_btn = QPushButton('ZERO ALL')
         self.zero_btn.setStyleSheet('padding:15px')
         self.zero_btn.setToolTip('Zero all axes')
         self.zero_btn.clicked.connect(
@@ -755,9 +755,13 @@ class ControlsPanel(QGroupBox):
         if self.unit_selection_dropdown.currentText() == 'Intracellular':
             # self._current_unit = 1
             self.AXES.selected = [1, 2, 3]
+            self.move_away_btn.setEnabled(True)
+            self.return_btn.setEnabled(True)
         else:
             # self._current_unit = 2
             self.AXES.selected = [7, 8, 9]
+            self.move_away_btn.setEnabled(False)
+            self.return_btn.setEnabled(False)
 
         # self.manipulator.setUnit(self._current_unit)
         self.manipulator.setCurrentAxes(self.AXES.selected)
@@ -777,10 +781,20 @@ class ControlsPanel(QGroupBox):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
         """
         logger.info('Exiting brain, moving to 100 um')
-        self.manipulator.approachAxesPosition(axes=[self.AXES.selected[0]],
-                                              approach_mode=0,
-                                              positions=[100],
-                                              speed_mode=0)
+        if self.AXES.selected == [7, 8, 9]:
+            msg = 'Retracting LFP probe. Are you sure?'
+            result = self.confirmDialog(msg)
+            if result == 1024:
+                self.manipulator.approachAxesPosition(
+                    axes=[self.AXES.selected[0]],
+                    approach_mode=0,
+                    positions=[100, 100],
+                    speed_mode=0)
+        else:
+            self.manipulator.approachAxesPosition(axes=[self.AXES.selected[0]],
+                                                  approach_mode=0,
+                                                  positions=[100],
+                                                  speed_mode=0)
 
     def moveAway(self):
         """Move away from the tissue. If the pipette position indicates it
@@ -876,6 +890,25 @@ class ControlsPanel(QGroupBox):
             error_box.setDefaultButton(QMessageBox.Ok)
 
         return error_box.exec()
+
+    def confirmDialog(self, message):
+        """Generate confirmation dialog to notify user of a problem
+
+        Parameters
+        ----------
+        message : str
+            Message to display on dialog box
+        """
+        logger.info(message)
+
+        confirm_box = QMessageBox()
+        confirm_box.setIcon(QMessageBox.Information)
+        confirm_box.setWindowTitle('Moving LFP')
+        confirm_box.setText(message)
+        confirm_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        confirm_box.setDefaultButton(QMessageBox.Cancel)
+
+        return confirm_box.exec()
 
 
 class ApproachWindow(QWidget):
