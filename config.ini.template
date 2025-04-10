@@ -1,12 +1,18 @@
-[GUI]
-DATA_PATH = 'C:/Path/to/data'
-ENVIRONMENT = 'live'
-DEBUG = False
+[GENERAL]
+DATA_PATH = D:/ephys/Raul
+ENVIRONMENT = live
+LOG = DEBUG
+WAVESURFER = True
 
 [MANIPULATOR]
+# serial or socket
+CONNECTION = socket
+LOG = DEBUG
+
 # Configured IP for manipulator 
-IP = '0.0.0.0'
+IP = 192.168.178.30
 PORT = 1001
+
 # Serial number as read through COM PORT 
-SERIAL = ''
-DEBUG = False
+SERIAL = AQ01JPBXA
+BAUDRATE = 115200
