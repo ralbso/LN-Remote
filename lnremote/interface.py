@@ -90,12 +90,23 @@ class AcquisitionWorker(QObject):
     def run(self):
         while self.keep_running:
             self.mutex.lock()
-            self.wait_condition.wait(self.mutex)
+            self.wait_condition.wait(self.mutex, 2000)  # 2 second timeout
             self.mutex.unlock()
 
-            time.sleep(0.5)
-            self.data = self.manipulator.readManipulator()
-            self.data_ready.emit()
+            if not self.keep_running:
+                break
+
+            try:
+                time.sleep(0.2)  # read every 200 ms
+                self.data = self.manipulator.readManipulator()
+                self.data_ready.emit()
+            except Exception as e:
+                logger.error(f'Error in AcquisitionWorker: {e}')
+
+                # still emit a signal with None to keep loop going
+                # if there's an error, position data will just not update
+                self.data = [None, None, None, None]
+                self.data_ready.emit()
 
         self.finished.emit()
 
