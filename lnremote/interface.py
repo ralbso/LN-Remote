@@ -67,8 +67,9 @@ class Interface:
 
 class AcquisitionWorker(QObject):
     """The `AcquisitionWorker` class serves as a worker thread for the
-    `Interface` class. It continuously reads the manipulator's current
-    position and emits a signal when new data is available.
+    `Interface` class. This is where the magic happens: it continuously
+    reads the manipulator's current position and emits a signal when
+    new data is available.
     """
 
     finished = Signal()
@@ -90,14 +91,14 @@ class AcquisitionWorker(QObject):
     def run(self):
         while self.keep_running:
             self.mutex.lock()
-            self.wait_condition.wait(self.mutex, 2000)  # 2 second timeout
+            self.wait_condition.wait(self.mutex, 1500)  # 1.5 second timeout
             self.mutex.unlock()
 
             if not self.keep_running:
                 break
 
             try:
-                time.sleep(0.2)  # read every 200 ms
+                time.sleep(0.1)  # read every 100 ms
                 self.data = self.manipulator.readManipulator()
                 self.data_ready.emit()
             except Exception as e:
