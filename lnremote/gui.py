@@ -663,13 +663,14 @@ class ControlsPanel(QGroupBox):
     """Create the controls panel, which contains all other manipulator
     controls, with a focus on automation.
     """
-    def __init__(self, manipulator, position_panel, style, axes):
+    def __init__(self, manipulator, position_panel, style, dark_mode,axes):
         super().__init__('Controls')
 
         self.manipulator = manipulator
         self.position_panel = position_panel
         self.approach_win = None
         self.style = style
+        self.dark_mode = dark_mode
 
         self.AXES = axes
 
@@ -770,6 +771,14 @@ class ControlsPanel(QGroupBox):
     def openApproachWindow(self):
         """Open approach position window
         """
+        # check if window is already open
+        if self.approach_win is not None:
+            if self.approach_win.isVisible():
+                self.approach_win.raise_()
+                self.approach_win.activateWindow()
+                logger.info('Approach window already open, brought to foreground')
+                return
+            
         main_window = self.window()
         style, dark_mode = main_window.getCurrentStyle()
 
@@ -777,30 +786,31 @@ class ControlsPanel(QGroupBox):
         self.approach_win = ApproachWindow(style, dark_mode, self.AXES.selected)
 
         # register with main window for style updates
-        main_window.registerChildWindow(self.approach_win)
+        main_window.styleChanged.connect(self.approach_win.updateStyle)
 
         # connect cleanup on close
-        self.approach_win.destroyed.connect(
-            lambda: main_window.unregisterChildWindow(self.approach_win)
-        )
+        self.approach_win.destroyed.connect(self.onApproachWindowClosed)
 
         # connect signals
         self.approach_win.submitGoTo.connect(self.manipulator.approachAxesPosition)
         self.approach_win.submitSpeed.connect(self.manipulator.setPositioningVelocity)
+
         self.approach_win.show()
+        logger.info('Approach window opened')
 
-    # def approachPositionDialog(self):
-    #     """Open approach position dialog
-    #     """
-    #     if self.approach_win is None:
-    #         self.approach_win = ApproachWindow(self.style, self.AXES.selected)
+    def onApproachWindowClosed(self):
+        """Cleanup when approach window is closed
+        """
+        main_window = self.window()
+        try:
+            if self.approach_win is not None:
+                main_window.styleChanged.disconnect(self.approach_win.updateStyle)
+        except Exception as e:
+            logger.error(f'Error disconnecting styleChanged signal: {e}')
+            pass
 
-    #     self.approach_win.submitGoTo.connect(
-    #         self.manipulator.approachAxesPosition)
-    #     self.approach_win.submitSpeed.connect(
-    #         self.manipulator.setPositioningVelocity)
-        
-    #     self.approach_win.show()
+        self.approach_win = None
+        logger.info('Approach window closed and unregistered')
 
     def exitBrain(self):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
@@ -953,6 +963,7 @@ class ApproachWindow(QWidget):
         self.dark_mode = dark_mode
 
         self.setStyleSheet(style)
+
         # default speed to 'slow'
         self.speed = 'slow'
         self.setToggledSpeed()
@@ -990,10 +1001,7 @@ class ApproachWindow(QWidget):
         """
         layout.addWidget(self.createAxisLabel('X'), 0, 0)
         layout.addWidget(self.goto_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(),
-                         0,
-                         2,
-                         alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 0, 2, alignment=QtCore.Qt.AlignLeft)
 
         layout.addWidget(self.speed_selection_group, 1, 1)
         layout.addWidget(self.go_btn, 2, 1)
@@ -1125,6 +1133,9 @@ class AboutWindow(QWidget):
         """
         self.setStyleSheet(style)
         self.dark_mode = dark_mode
+
+    def closeEvent(self, event):
+        event.accept()
 
 
 class SettingsWindow(QWidget):
@@ -1403,7 +1414,6 @@ class SettingsWindow(QWidget):
     def closeEvent(self, event):
         """Handle window close event
         """
-        logger.info('Settings window closed')
         event.accept()
 
 
@@ -1422,7 +1432,9 @@ class MainWindow(QMainWindow):
         self.axes = SelectedAxes()
 
         # track child windows
-        self.child_windows = []
+        self.about_window = None
+        self.settings_window = None
+        # approach_win is tracked in ControlsPanel
 
         self.setupGui()
 
@@ -1491,27 +1503,6 @@ class MainWindow(QMainWindow):
 
         logger.info(f'Dark mode set to {self.dark_mode}')
 
-    def registerChildWindow(self, window):
-        """Register a child window to receive style updates
-        """
-        self.child_windows.append(window)
-
-        # connect to style changes
-        self.styleChanged.connect(window.updateStyle)
-        
-        logger.info(f'Registered child window: {window.windowTitle()}')
-
-    def unregisterChildWindow(self, window):
-        """Unregister a child window
-        """
-        if window in self.child_windows:
-            self.child_windows.remove(window)
-            try:
-                self.styleChanged.disconnect(window.updateStyle)
-            except Exception as e:
-                pass
-            logger.info(f'Unregistered child window: {window.windowTitle()}')
-
     def getCurrentStyle(self):
         """Get the current style and dark mode setting
         """
@@ -1520,7 +1511,7 @@ class MainWindow(QMainWindow):
     def _createActions(self):
         # File actions
         self.saveAction = QAction('&Save', self)
-        self.settingsAction = QAction('Se%ttings...', self)
+        self.settingsAction = QAction('Se&ttings...', self)
         self.exitAction = QAction('&Exit', self)
 
         # View actions
@@ -1560,21 +1551,71 @@ class MainWindow(QMainWindow):
         self.aboutAction.triggered.connect(self.aboutWindowCallback)
 
     def aboutWindowCallback(self):
+        """Open about window
+        """
+        if self.about_window is not None:
+            if self.about_window.isVisible():
+                # window exists, bring it to front
+                self.about_window.raise_()
+                self.about_window.activateWindow()
+                logger.info('About window already open, brought to foreground')
+                return
+        
+        # create new window
         self.about_window = AboutWindow(self.style, self.dark_mode)
-        self.registerChildWindow(self.about_window)
-        self.about_window.destroyed.connect(
-            lambda: self.unregisterChildWindow(self.about_window)
-        )
+        
+        # connect style updates
+        self.styleChanged.connect(self.about_window.updateStyle)
+
+        # clea up reference when window is clsoed
+        self.about_window.destroyed.connect(self.onAboutWindowClosed)
+
         self.about_window.show()
         logger.info('About window opened')
     
+    def onAboutWindowClosed(self):
+        """Handle about window cleanup
+        """
+        try:
+            if self.about_window is not None:
+                self.styleChanged.disconnect(self.about_window.updateStyle)
+        except Exception as e:
+            logger.error(f'Error disconnecting styleChanged signal: {e}')
+            pass
+        self.about_window = None
+        logger.info('About window closed and unregistered')
+
     def openSettingsWindow(self):
         """Open settings window
         """
+        if self.settings_window is not None:
+            if self.settings_window.isVisible():
+                # window exists, bring it to front
+                self.settings_window.raise_()
+                self.settings_window.activateWindow()
+                logger.info('Settings window already open, brought to foreground')
+                return
+        
+        # create new window
         self.settings_window = SettingsWindow(self.style, self.dark_mode)
-        self.registerChildWindow(self.settings_window)
-        self.settings_window.destroyed.connect(
-            lambda: self.unregisterChildWindow(self.settings_window)
-        )
+
+        # connect style updates
+        self.styleChanged.connect(self.settings_window.updateStyle)
+
+        # clean up reference when window is closed
+        self.settings_window.destroyed.connect(self.onSettingsWindowClosed)
+        
         self.settings_window.show()
         logger.info('Settings window opened')
+
+    def onSettingsWindowClosed(self):
+        """Handle settings window cleanup
+        """
+        try:
+            if self.settings_window is not None:
+                self.styleChanged.disconnect(self.settings_window.updateStyle)
+        except Exception as e:
+            logger.error(f'Error disconnecting styleChanged signal: {e}')
+            pass
+        self.settings_window = None
+        logger.info('Settings window closed and unregistered')
