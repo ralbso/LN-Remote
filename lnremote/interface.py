@@ -98,7 +98,7 @@ class AcquisitionWorker(QObject):
                 break
 
             try:
-                time.sleep(0.1)  # read every 100 ms
+                time.sleep(0.2)  # read every 200 ms
                 self.data = self.manipulator.readManipulator()
                 self.data_ready.emit()
             except Exception as e:

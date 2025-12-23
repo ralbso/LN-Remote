@@ -9,6 +9,7 @@ import numpy
 import qdarkstyle
 from __init__ import __about__
 from config_loader import LoadConfig
+import configparser
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import QSize, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QFont
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QGridLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit,
                                QMainWindow, QMenuBar, QMessageBox, QPushButton,
                                QRadioButton, QTableWidget, QTableWidgetItem,
-                               QVBoxLayout, QWidget)
+                               QVBoxLayout, QWidget, QSpinBox, QFrame)
 from qdarkstyle.light.palette import LightPalette
 
 # create logger
@@ -662,13 +663,14 @@ class ControlsPanel(QGroupBox):
     """Create the controls panel, which contains all other manipulator
     controls, with a focus on automation.
     """
-    def __init__(self, manipulator, position_panel, style, axes):
+    def __init__(self, manipulator, position_panel, style, dark_mode,axes):
         super().__init__('Controls')
 
         self.manipulator = manipulator
         self.position_panel = position_panel
         self.approach_win = None
         self.style = style
+        self.dark_mode = dark_mode
 
         self.AXES = axes
 
@@ -723,7 +725,7 @@ class ControlsPanel(QGroupBox):
         self.approach_btn = QPushButton('Approach')
         self.approach_btn.setStyleSheet('padding:15px')
         self.approach_btn.setToolTip('Go to absolute coordinates')
-        self.approach_btn.clicked.connect(self.approachPositionDialog)
+        self.approach_btn.clicked.connect(self.openApproachWindow)
 
     def createExitBrainButton(self):
         """Create exit brain button
@@ -766,16 +768,49 @@ class ControlsPanel(QGroupBox):
         # self.manipulator.setUnit(self._current_unit)
         self.manipulator.setCurrentAxes(self.AXES.selected)
 
-    def approachPositionDialog(self):
-        """Open approach position dialog
+    def openApproachWindow(self):
+        """Open approach position window
         """
-        if self.approach_win is None:
-            self.approach_win = ApproachWindow(self.style, self.AXES.selected)
-        self.approach_win.submitGoTo.connect(
-            self.manipulator.approachAxesPosition)
-        self.approach_win.submitSpeed.connect(
-            self.manipulator.setPositioningVelocity)
+        # check if window is already open
+        if self.approach_win is not None:
+            if self.approach_win.isVisible():
+                self.approach_win.raise_()
+                self.approach_win.activateWindow()
+                logger.info('Approach window already open, brought to foreground')
+                return
+            
+        main_window = self.window()
+        style, dark_mode = main_window.getCurrentStyle()
+
+        # create window with current style
+        self.approach_win = ApproachWindow(style, dark_mode, self.AXES.selected)
+
+        # register with main window for style updates
+        main_window.styleChanged.connect(self.approach_win.updateStyle)
+
+        # connect cleanup on close
+        self.approach_win.destroyed.connect(self.onApproachWindowClosed)
+
+        # connect signals
+        self.approach_win.submitGoTo.connect(self.manipulator.approachAxesPosition)
+        self.approach_win.submitSpeed.connect(self.manipulator.setPositioningVelocity)
+
         self.approach_win.show()
+        logger.info('Approach window opened')
+
+    def onApproachWindowClosed(self):
+        """Cleanup when approach window is closed
+        """
+        main_window = self.window()
+        try:
+            if self.approach_win is not None:
+                main_window.styleChanged.disconnect(self.approach_win.updateStyle)
+        except Exception as e:
+            logger.error(f'Error disconnecting styleChanged signal: {e}')
+            pass
+
+        self.approach_win = None
+        logger.info('Approach window closed and unregistered')
 
     def exitBrain(self):
         """Slowly exit tissue to a safe distance (100 um away from the tissue)
@@ -919,14 +954,16 @@ class ApproachWindow(QWidget):
     submitGoTo = Signal(list, float, list, int)
     submitSpeed = Signal(list, int, int)
 
-    def __init__(self, style, axes):
+    def __init__(self, style, dark_mode, axes):
         super().__init__()
         self.setWindowTitle('Approach')
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
         self.axes = axes
+        self.dark_mode = dark_mode
 
         self.setStyleSheet(style)
+
         # default speed to 'slow'
         self.speed = 'slow'
         self.setToggledSpeed()
@@ -939,6 +976,17 @@ class ApproachWindow(QWidget):
         self.addToLayout(layout)
 
         logger.info('Approach window created')
+
+    @Slot(str, bool)
+    def updateStyle(self, style, dark_mode):
+        """Update window style
+        """
+        self.setStyleSheet(style)
+        self.dark_mode = dark_mode
+
+    def closeEvent(self, event):
+        """Handle window close event"""
+        event.accept()
 
     def createContents(self):
         """Create window contents
@@ -953,10 +1001,7 @@ class ApproachWindow(QWidget):
         """
         layout.addWidget(self.createAxisLabel('X'), 0, 0)
         layout.addWidget(self.goto_x, 0, 1, alignment=QtCore.Qt.AlignLeft)
-        layout.addWidget(self.createUnitLabel(),
-                         0,
-                         2,
-                         alignment=QtCore.Qt.AlignLeft)
+        layout.addWidget(self.createUnitLabel(), 0, 2, alignment=QtCore.Qt.AlignLeft)
 
         layout.addWidget(self.speed_selection_group, 1, 1)
         layout.addWidget(self.go_btn, 2, 1)
@@ -1065,12 +1110,13 @@ class ApproachWindow(QWidget):
 class AboutWindow(QWidget):
     """Create a simple About window, for the curious ones
     """
-    def __init__(self, style):
+    def __init__(self, style, dark_mode):
         super().__init__()
         self.setFixedSize(275, 175)
         self.setWindowTitle('About')
         self.setStyleSheet(style)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.dark_mode = dark_mode
 
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -1081,17 +1127,315 @@ class AboutWindow(QWidget):
 
         logger.info('About window created')
 
+    @Slot(str, bool)
+    def updateStyle(self, style, dark_mode):
+        """Update window style
+        """
+        self.setStyleSheet(style)
+        self.dark_mode = dark_mode
+
+    def closeEvent(self, event):
+        event.accept()
+
+
+class SettingsWindow(QWidget):
+    """Settings window for configuration options
+    """
+
+    # signal to notify when settings are saved
+    settingsSaved = Signal()
+
+    def __init__(self, style, dark_mode):
+        super().__init__()
+        self.setWindowTitle('Settings')
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setStyleSheet(style)
+        self.setMinimumSize(QSize(400, 200))
+        self.dark_mode = dark_mode
+
+        self.config_loader = LoadConfig()
+        self.config_path = Path(__file__).absolute().parent.parent / 'config.ini'
+
+        # main layout
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+
+        # create tab widget for different settings categories
+        self.tabs = QtWidgets.QTabWidget()
+        main_layout.addWidget(self.tabs)
+
+        # create tabs
+        self.createGeneralTab()
+        self.createManipulatorTab()
+
+        # add a separator line
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        main_layout.addWidget(separator)
+
+        # button layout
+        button_widget = QWidget()
+        button_layout = QHBoxLayout()
+        button_widget.setLayout(button_layout)
+        button_widget.setFixedHeight(50)
+
+        # create buttons with explicity styling
+        self.save_btn = QPushButton('Save')
+        self.save_btn.setMinimumWidth(100)
+        self.save_btn.setStyleSheet('padding: 8px;')
+
+        self.apply_btn = QPushButton('Apply')
+        self.apply_btn.setMinimumWidth(100)
+        self.apply_btn.setStyleSheet('padding: 8px;')
+
+        self.cancel_btn = QPushButton('Cancel')
+        self.cancel_btn.setMinimumWidth(100)
+        self.cancel_btn.setStyleSheet('padding: 8px;')
+
+        self.save_btn.clicked.connect(self.saveAndClose)
+        self.cancel_btn.clicked.connect(self.close)
+        self.apply_btn.clicked.connect(self.applySettings)
+
+        button_layout.addStretch()
+        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.apply_btn)
+        button_layout.addWidget(self.cancel_btn)
+
+        main_layout.addWidget(button_widget, 0)
+
+        logger.info('Settings window created')
+
+    def createGeneralTab(self):
+        """Create the General settings tab
+        """
+        general_widget = QWidget()
+        general_layout = QGridLayout()
+        general_widget.setLayout(general_layout)
+
+        # load current settings
+        general_config = self.config_loader.General()
+
+        # data path setting
+        row = 0
+        general_layout.addWidget(QLabel('Data Path:'), row, 0)
+        self.data_path_edit = QLineEdit(general_config.get('data_path', ''))
+        self.data_path_edit.setToolTip('Directory where data will be saved')
+        general_layout.addWidget(self.data_path_edit, row, 1)
+
+        browse_btn = QPushButton('Browse...')
+        browse_btn.setMaximumWidth(100)
+        browse_btn.clicked.connect(self.browsePath)
+        general_layout.addWidget(browse_btn, row, 2)
+
+        row += 1
+        general_layout.addWidget(QLabel('GUI Settings:'), row, 0, 1, 3)
+
+        row += 1
+        self.dark_mode_checkbox = QCheckBox('Enable Dark Mode')
+        self.dark_mode_checkbox.setChecked(general_config.get('dark_mode', 'True').lower() == 'true')
+        general_layout.addWidget(self.dark_mode_checkbox, row, 1)
+
+        # add spacer to push everything to top
+        general_layout.setRowStretch(row + 1, 1)
+
+        self.tabs.addTab(general_widget, 'General')
+
+    def createManipulatorTab(self):
+        """Create the Manipulator settings tab
+        """
+        manipulator_widget = QWidget()
+        manipulator_layout = QGridLayout()
+        manipulator_widget.setLayout(manipulator_layout)
+
+        # load current settings
+        manipulator_config = self.config_loader.Manipulator()
+
+        row = 0
+
+        # connection type
+        manipulator_layout.addWidget(QLabel('Connection Type:'), row, 0)
+        self.connection_combo = QComboBox()
+        self.connection_combo.addItems(['Ethernet', 'USB', 'Demo'])
+        current_connection = manipulator_config.get('connection', 'Ethernet').lower()
+        self.connection_combo.setCurrentText(current_connection.capitalize())
+        self.connection_combo.currentTextChanged.connect(self.onConnectionChanged)
+        manipulator_layout.addWidget(self.connection_combo, row, 1)
+
+        row += 1
+        manipulator_layout.addWidget(QLabel(''), row, 0)  # spacer
+
+        # serial settings group
+        row += 1
+        serial_label = QLabel('Serial Settings:')
+        serial_label.setStyleSheet('font-weight: bold;')
+        manipulator_layout.addWidget(serial_label, row, 0, 1, 2)
+
+        row += 1
+        manipulator_layout.addWidget(QLabel('Serial Port:'), row, 0)
+        self.serial_edit = QLineEdit(manipulator_config.get('serial_port', ''))
+        self.serial_edit.setToolTip('Serial port for the manipulator')
+        manipulator_layout.addWidget(self.serial_edit, row, 1)
+
+        row += 1
+        manipulator_layout.addWidget(QLabel('Baud Rate:'), row, 0)
+        self.baudrate_combo = QComboBox()
+        self.baudrate_combo.addItems(['9600', '19200', '38400', '57600', '115200'])
+        self.baudrate_combo.setCurrentText(str(manipulator_config.get('baudrate', '115200')))
+        self.baudrate_combo.setEditable(True)
+        manipulator_layout.addWidget(self.baudrate_combo, row, 1)
+
+        row += 1
+        manipulator_layout.addWidget(QLabel(''), row, 0)  # spacer
+
+        # network settings group
+        row += 1
+        network_label = QLabel('Network Settings:')
+        network_label.setStyleSheet('font-weight: bold;')
+        manipulator_layout.addWidget(network_label, row, 0, 1, 2)
+
+        row += 1
+        manipulator_layout.addWidget(QLabel('IP Address:'), row, 0)
+        self.ip_edit = QLineEdit(manipulator_config.get('ip', '192.168.178.30'))
+        self.ip_edit.setToolTip('IP address for network connection')
+        manipulator_layout.addWidget(self.ip_edit, row, 1)
+
+        row += 1
+        manipulator_layout.addWidget(QLabel('Port:'), row, 0)
+        self.port_spin = QSpinBox()
+        self.port_spin.setRange(1, 65535)
+        self.port_spin.setValue(int(manipulator_config.get('port', '1001')))
+        self.port_spin.setToolTip('Port number for network connection')
+        manipulator_layout.addWidget(self.port_spin, row, 1)
+
+        # enable/disable fields based on connection type
+        self.onConnectionChanged(current_connection)
+
+        # add spacer to push everything to top
+        manipulator_layout.setRowStretch(row + 1, 1)
+
+        self.tabs.addTab(manipulator_widget, 'Manipulator')
+
+    @Slot(str, bool)
+    def updateStyle(self, style, dark_mode):
+        """Update window style
+        """
+        self.setStyleSheet(style)
+        self.dark_mode = dark_mode
+
+    def onConnectionChanged(self, connection_type):
+        """Enable/disable fields based on connection type
+        """
+        is_serial = connection_type.lower() == 'usb'
+        is_network = connection_type.lower() == 'ethernet'
+
+        self.serial_edit.setEnabled(is_serial)
+        self.baudrate_combo.setEnabled(is_serial)
+        self.ip_edit.setEnabled(is_network)
+        self.port_spin.setEnabled(is_network)
+
+    def browsePath(self):
+        """Open file browser to select data path
+        """
+        from PySide6.QtWidgets import QFileDialog
+
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select data directory",
+            self.data_path_edit.text()
+        )
+
+        if directory:
+            self.data_path_edit.setText(directory)
+
+    def applySettings(self):
+        """Apply settings without closing the window
+        """
+        try:
+            # read the config file
+            config = configparser.ConfigParser()
+            config.read(self.config_path)
+
+            # update GENERAL section
+            if not config.has_section('GENERAL'):
+                config.add_section('GENERAL')
+
+            config.set('GENERAL', 'data_path', self.data_path_edit.text())
+            config.set('GENERAL', 'dark_mode', str(self.dark_mode_checkbox.isChecked()))
+
+            # update MANIPULATOR section
+            if not config.has_section('MANIPULATOR'):
+                config.add_section('MANIPULATOR')
+
+            config.set('MANIPULATOR', 'connection', self.connection_combo.currentText())
+            config.set('MANIPULATOR', 'serial_port', self.serial_edit.text())
+            config.set('MANIPULATOR', 'baudrate', self.baudrate_combo.currentText())
+            config.set('MANIPULATOR', 'ip', self.ip_edit.text())
+            config.set('MANIPULATOR', 'port', str(self.port_spin.value()))
+
+            # write to config file
+            with open(self.config_path, 'w') as configfile:
+                config.write(configfile)
+
+            logger.info('Settings saved successfully')
+
+            # show confirmation
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Information)
+            msg.setWindowTitle('Settings Saved')
+            msg.setText('Settings have been saved successfully.')
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.setWindowFlags(Qt.WindowStaysOnTopHint)
+            msg.exec()
+
+            # emit signal
+            self.settingsSaved.emit()
+
+            return True
+        
+        except Exception as e:
+            logger.error(f'Error saving settings: {e}')
+
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setWindowTitle('Error')
+            msg.setText(f'Failed to save settings:\n{e}')
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.exec()
+
+            return False
+        
+    def saveAndClose(self):
+        """Save settings and close the window
+        """
+        if self.applySettings():
+            self.close()
+
+    def closeEvent(self, event):
+        """Handle window close event
+        """
+        event.accept()
+
 
 class MainWindow(QMainWindow):
 
     CONFIG = LoadConfig().General()
     PATH = CONFIG['data_path']
 
+    # signal to notify when stylesheet or dark mode changes
+    styleChanged = Signal(str, bool)  # stylesheet, dark_mode
+
     def __init__(self, interface):
         super().__init__()
 
         self.manipulator = interface.manipulator
         self.axes = SelectedAxes()
+
+        # track child windows
+        self.about_window = None
+        self.settings_window = None
+        # approach_win is tracked in ControlsPanel
+
         self.setupGui()
 
         logger.info('Main window initialized')
@@ -1117,7 +1461,7 @@ class MainWindow(QMainWindow):
                                                 self.axes)
         self.controls_panel = ControlsPanel(self.manipulator,
                                             self.position_panel, self.style,
-                                            self.axes)
+                                            self.dark_mode, self.axes)
 
         self.content_layout = QGridLayout()
         self.content_layout.addWidget(self.position_panel, 0, 0)
@@ -1144,15 +1488,30 @@ class MainWindow(QMainWindow):
             self.style = self.light_stylesheet
 
         self.setStyleSheet(self.style)
+
+        # emit signal to update all child windows
+        self.styleChanged.emit(self.style, self.dark_mode)
+
         return self.style
 
     def toggleDarkMode(self):
         self.dark_mode = self.modeAction.isChecked()
         self.setDisplayMode()
 
+        if hasattr(self, 'controls_panel'):
+            self.controls_panel.dark_mode = self.dark_mode
+
+        logger.info(f'Dark mode set to {self.dark_mode}')
+
+    def getCurrentStyle(self):
+        """Get the current style and dark mode setting
+        """
+        return self.style, self.dark_mode
+
     def _createActions(self):
         # File actions
         self.saveAction = QAction('&Save', self)
+        self.settingsAction = QAction('Se&ttings...', self)
         self.exitAction = QAction('&Exit', self)
 
         # View actions
@@ -1160,6 +1519,7 @@ class MainWindow(QMainWindow):
         self.modeAction.setChecked(True)
 
         # About actions
+        # help action not yet defined, but will link to help documentation
         # self.helpAction = QAction('&Help', self)
         self.aboutAction = QAction('&About...', self)
 
@@ -1169,6 +1529,8 @@ class MainWindow(QMainWindow):
 
         file_menu = menu_bar.addMenu('&File')
         file_menu.addAction(self.saveAction)
+        file_menu.addAction(self.settingsAction)
+        file_menu.addSeparator()
         file_menu.addAction(self.exitAction)
 
         view_menu = menu_bar.addMenu('&View')
@@ -1180,6 +1542,7 @@ class MainWindow(QMainWindow):
 
     def _connectActions(self):
         self.saveAction.triggered.connect(self.cells_panel.saveTableData)
+        self.settingsAction.triggered.connect(self.openSettingsWindow)
         self.exitAction.triggered.connect(self.close)
 
         self.modeAction.triggered.connect(self.toggleDarkMode)
@@ -1188,5 +1551,71 @@ class MainWindow(QMainWindow):
         self.aboutAction.triggered.connect(self.aboutWindowCallback)
 
     def aboutWindowCallback(self):
-        self.about_window = AboutWindow(self.style)
+        """Open about window
+        """
+        if self.about_window is not None:
+            if self.about_window.isVisible():
+                # window exists, bring it to front
+                self.about_window.raise_()
+                self.about_window.activateWindow()
+                logger.info('About window already open, brought to foreground')
+                return
+        
+        # create new window
+        self.about_window = AboutWindow(self.style, self.dark_mode)
+        
+        # connect style updates
+        self.styleChanged.connect(self.about_window.updateStyle)
+
+        # clea up reference when window is clsoed
+        self.about_window.destroyed.connect(self.onAboutWindowClosed)
+
         self.about_window.show()
+        logger.info('About window opened')
+    
+    def onAboutWindowClosed(self):
+        """Handle about window cleanup
+        """
+        try:
+            if self.about_window is not None:
+                self.styleChanged.disconnect(self.about_window.updateStyle)
+        except Exception as e:
+            logger.error(f'Error disconnecting styleChanged signal: {e}')
+            pass
+        self.about_window = None
+        logger.info('About window closed and unregistered')
+
+    def openSettingsWindow(self):
+        """Open settings window
+        """
+        if self.settings_window is not None:
+            if self.settings_window.isVisible():
+                # window exists, bring it to front
+                self.settings_window.raise_()
+                self.settings_window.activateWindow()
+                logger.info('Settings window already open, brought to foreground')
+                return
+        
+        # create new window
+        self.settings_window = SettingsWindow(self.style, self.dark_mode)
+
+        # connect style updates
+        self.styleChanged.connect(self.settings_window.updateStyle)
+
+        # clean up reference when window is closed
+        self.settings_window.destroyed.connect(self.onSettingsWindowClosed)
+        
+        self.settings_window.show()
+        logger.info('Settings window opened')
+
+    def onSettingsWindowClosed(self):
+        """Handle settings window cleanup
+        """
+        try:
+            if self.settings_window is not None:
+                self.styleChanged.disconnect(self.settings_window.updateStyle)
+        except Exception as e:
+            logger.error(f'Error disconnecting styleChanged signal: {e}')
+            pass
+        self.settings_window = None
+        logger.info('Settings window closed and unregistered')
