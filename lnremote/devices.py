@@ -65,7 +65,7 @@ class LNSM10:
 
     def checkDevice(self):
         # check ethernet connection
-        if LNSM10.CONNECTION == "socket":
+        if LNSM10.CONNECTION == "ethernet":
             logger.info("Testing ethernet connection...")
             s = socket.socket()
             # s.settimeout(self._socket_timeout)
@@ -291,7 +291,7 @@ class LNSM10:
                 self.checkResponse(
                     cmd_id, ans)  # check manipulator response for errors
 
-        elif LNSM10.CONNECTION == "socket":
+        elif LNSM10.CONNECTION == "ethernet":
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 address = (LNSM10.IP, LNSM10.PORT)
                 while True:
