@@ -771,6 +771,9 @@ class ControlsPanel(QGroupBox):
     def openApproachWindow(self):
         """Open approach position window
         """
+        main_window = self.window()
+        style, dark_mode = main_window.getCurrentStyle()
+
         # check if window is already open
         if self.approach_win is not None:
             if self.approach_win.isVisible():
@@ -778,13 +781,11 @@ class ControlsPanel(QGroupBox):
                 self.approach_win.activateWindow()
                 logger.info('Approach window already open, brought to foreground')
                 return
-            
-        main_window = self.window()
-        style, dark_mode = main_window.getCurrentStyle()
-
-        # create window with current style
-        self.approach_win = ApproachWindow(style, dark_mode, self.AXES.selected)
-
+        else:
+            logger.info('Creating new approach window')
+            # create window with current style
+            self.approach_win = ApproachWindow(style, dark_mode, self.AXES.selected)
+        
         # register with main window for style updates
         main_window.styleChanged.connect(self.approach_win.updateStyle)
 
@@ -1560,9 +1561,10 @@ class MainWindow(QMainWindow):
                 self.about_window.activateWindow()
                 logger.info('About window already open, brought to foreground')
                 return
-        
-        # create new window
-        self.about_window = AboutWindow(self.style, self.dark_mode)
+        else:
+            # create new window
+            logger.info('Creating new about window')
+            self.about_window = AboutWindow(self.style, self.dark_mode)
         
         # connect style updates
         self.styleChanged.connect(self.about_window.updateStyle)
@@ -1595,9 +1597,9 @@ class MainWindow(QMainWindow):
                 self.settings_window.activateWindow()
                 logger.info('Settings window already open, brought to foreground')
                 return
-        
-        # create new window
-        self.settings_window = SettingsWindow(self.style, self.dark_mode)
+        else:
+            # create new window
+            self.settings_window = SettingsWindow(self.style, self.dark_mode)
 
         # connect style updates
         self.styleChanged.connect(self.settings_window.updateStyle)
