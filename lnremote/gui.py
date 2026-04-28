@@ -2,6 +2,7 @@ import csv
 import datetime
 import logging
 import time
+import sys
 from pathlib import Path
 import resources
 
@@ -1426,8 +1427,15 @@ class MainWindow(QMainWindow):
     # signal to notify when stylesheet or dark mode changes
     styleChanged = Signal(str, bool)  # stylesheet, dark_mode
 
-    def __init__(self, interface):
+    def __init__(self, interface, lightweight: bool | None = None):
         super().__init__()
+
+        # Display mode: full (default) or lightweight (Position + Controls only).
+        # If not explicitly provided, allow enabling via CLI flag: --lightweight
+        if lightweight is None:
+            lightweight = ('--lightweight' in sys.argv)
+        self.lightweight = bool(lightweight)
+
 
         self.manipulator = interface.manipulator
         self.axes = SelectedAxes()
@@ -1449,7 +1457,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(icon)
         self.setWindowTitle('Manipulator GUI')
         self.setMinimumSize(QSize(400, 300))
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(200)
         self.setFont(QFont('Helvetica', 14))
         # self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.dark_mode = True
@@ -1457,18 +1465,30 @@ class MainWindow(QMainWindow):
         self.setDisplayMode()
 
         self.position_panel = PositionPanel(self.manipulator, self.axes)
-        self.cells_panel = CellsPanel(self.position_panel, MainWindow.PATH)
-        self.navigation_panel = NavigationPanel(self.manipulator,
-                                                self.axes)
-        self.controls_panel = ControlsPanel(self.manipulator,
-                                            self.position_panel, self.style,
-                                            self.dark_mode, self.axes)
 
-        self.content_layout = QGridLayout()
-        self.content_layout.addWidget(self.position_panel, 0, 0)
-        self.content_layout.addWidget(self.cells_panel, 0, 1)
-        self.content_layout.addWidget(self.navigation_panel, 1, 0)
-        self.content_layout.addWidget(self.controls_panel, 1, 1)
+        # Full GUI (default): Position, Cells, Navigation, Controls
+        # Lightweight GUI: Position + Controls stacked vertically
+        if self.lightweight:
+            self.cells_panel = None
+            self.navigation_panel = None
+            self.controls_panel = ControlsPanel(
+                self.manipulator, self.position_panel, self.style, self.dark_mode, self.axes)
+
+            self.content_layout = QGridLayout()
+            # Keep Position panel where it is (0,0); place Controls right below (1,0).
+            self.content_layout.addWidget(self.position_panel, 0, 0)
+            self.content_layout.addWidget(self.controls_panel, 1, 0)
+        else:
+            self.cells_panel = CellsPanel(self.position_panel, MainWindow.PATH)
+            self.navigation_panel = NavigationPanel(self.manipulator, self.axes)
+            self.controls_panel = ControlsPanel(
+                self.manipulator, self.position_panel, self.style, self.dark_mode, self.axes)
+
+            self.content_layout = QGridLayout()
+            self.content_layout.addWidget(self.position_panel, 0, 0)
+            self.content_layout.addWidget(self.cells_panel, 0, 1)
+            self.content_layout.addWidget(self.navigation_panel, 1, 0)
+            self.content_layout.addWidget(self.controls_panel, 1, 1)
 
         self.setCentralWidget(QWidget())
         self.centralWidget().setLayout(self.content_layout)
@@ -1515,6 +1535,10 @@ class MainWindow(QMainWindow):
         self.settingsAction = QAction('Se&ttings...', self)
         self.exitAction = QAction('&Exit', self)
 
+        # In lightweight mode there is no Cells panel/table to save.
+        if getattr(self, "lightweight", False):
+            self.saveAction.setEnabled(False)
+
         # View actions
         self.modeAction = QAction('&Dark mode', self, checkable=True)
         self.modeAction.setChecked(True)
@@ -1542,7 +1566,10 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self.aboutAction)
 
     def _connectActions(self):
-        self.saveAction.triggered.connect(self.cells_panel.saveTableData)
+        if self.cells_panel is not None:
+            self.saveAction.triggered.connect(self.cells_panel.saveTableData)
+        else:
+            self.saveAction.setEnabled(False)
         self.settingsAction.triggered.connect(self.openSettingsWindow)
         self.exitAction.triggered.connect(self.close)
 
